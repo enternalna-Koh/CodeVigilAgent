@@ -1,0 +1,1436 @@
+{
+  "summary": {
+    "total_repos": 3,
+    "total_workflows": 175,
+    "category_totals": {
+      "build": 14,
+      "test": 57,
+      "lint": 5,
+      "docker": 24,
+      "e2e": 7,
+      "nightly": 35,
+      "pr": 47,
+      "deploy": 30,
+      "other": 44
+    }
+  },
+  "repositories": [
+    {
+      "repository": "Ascend/pytorch",
+      "total_workflows": 11,
+      "categories": {
+        "build": 3,
+        "test": 2,
+        "lint": 0,
+        "docker": 1,
+        "e2e": 0,
+        "nightly": 1,
+        "pr": 2,
+        "deploy": 0,
+        "other": 4
+      },
+      "workflows": {
+        "build": [
+          {
+            "name": "_build-and-test.yml",
+            "path": ".github/workflows/_build-and-test.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/_build-and-test.yml"
+          },
+          {
+            "name": "_build.yml",
+            "path": ".github/workflows/_build.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/_build.yml"
+          },
+          {
+            "name": "build-docker-images.yml",
+            "path": ".github/workflows/build-docker-images.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/build-docker-images.yml"
+          }
+        ],
+        "test": [
+          {
+            "name": "_build-and-test.yml",
+            "path": ".github/workflows/_build-and-test.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/_build-and-test.yml"
+          },
+          {
+            "name": "torch-npu-v2-7-1-upstream-test-trigger.yml",
+            "path": ".github/workflows/torch-npu-v2-7-1-upstream-test-trigger.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/torch-npu-v2-7-1-upstream-test-trigger.yml"
+          }
+        ],
+        "lint": [],
+        "docker": [
+          {
+            "name": "build-docker-images.yml",
+            "path": ".github/workflows/build-docker-images.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/build-docker-images.yml"
+          }
+        ],
+        "e2e": [],
+        "nightly": [
+          {
+            "name": "pytorch_coverage_nightly.yml",
+            "path": ".github/workflows/pytorch_coverage_nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/pytorch_coverage_nightly.yml"
+          }
+        ],
+        "pr": [
+          {
+            "name": "pytorch_ci_trigger_pr.yml",
+            "path": ".github/workflows/pytorch_ci_trigger_pr.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/pytorch_ci_trigger_pr.yml"
+          },
+          {
+            "name": "pytorch_ci_trigger_precise.yml",
+            "path": ".github/workflows/pytorch_ci_trigger_precise.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/pytorch_ci_trigger_precise.yml"
+          }
+        ],
+        "deploy": [],
+        "other": [
+          {
+            "name": "_fetch_and_rebase.yml",
+            "path": ".github/workflows/_fetch_and_rebase.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/_fetch_and_rebase.yml"
+          },
+          {
+            "name": "manual.yml",
+            "path": ".github/workflows/manual.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/manual.yml"
+          },
+          {
+            "name": "periodic.yml",
+            "path": ".github/workflows/periodic.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/periodic.yml"
+          },
+          {
+            "name": "pytorch_ci_trigger_push.yml",
+            "path": ".github/workflows/pytorch_ci_trigger_push.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/pytorch_ci_trigger_push.yml"
+          }
+        ]
+      }
+    },
+    {
+      "repository": "vllm-ascend",
+      "total_workflows": 54,
+      "categories": {
+        "build": 8,
+        "test": 17,
+        "lint": 2,
+        "docker": 1,
+        "e2e": 6,
+        "nightly": 13,
+        "pr": 11,
+        "deploy": 1,
+        "other": 13
+      },
+      "workflows": {
+        "build": [
+          {
+            "name": "_build_csrc_cache.yaml",
+            "path": ".github/workflows/_build_csrc_cache.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_build_csrc_cache.yaml"
+          },
+          {
+            "name": "_nightly_image_build.yaml",
+            "path": ".github/workflows/_nightly_image_build.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_nightly_image_build.yaml"
+          },
+          {
+            "name": "_schedule_image_build.yaml",
+            "path": ".github/workflows/_schedule_image_build.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_schedule_image_build.yaml"
+          },
+          {
+            "name": "nightly_image_build.yaml",
+            "path": ".github/workflows/nightly_image_build.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/nightly_image_build.yaml"
+          },
+          {
+            "name": "push_build_csrc_cache.yaml",
+            "path": ".github/workflows/push_build_csrc_cache.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/push_build_csrc_cache.yaml"
+          },
+          {
+            "name": "push_build_precommit_cache.yaml",
+            "path": ".github/workflows/push_build_precommit_cache.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/push_build_precommit_cache.yaml"
+          },
+          {
+            "name": "schedule_image_build_and_push.yaml",
+            "path": ".github/workflows/schedule_image_build_and_push.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_image_build_and_push.yaml"
+          },
+          {
+            "name": "schedule_lint_image_build.yaml",
+            "path": ".github/workflows/schedule_lint_image_build.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_lint_image_build.yaml"
+          }
+        ],
+        "test": [
+          {
+            "name": "_selected_tests.yaml",
+            "path": ".github/workflows/_selected_tests.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_selected_tests.yaml"
+          },
+          {
+            "name": "_selected_tests_upstream.yaml",
+            "path": ".github/workflows/_selected_tests_upstream.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_selected_tests_upstream.yaml"
+          },
+          {
+            "name": "pr_supplement_new_tests.yaml",
+            "path": ".github/workflows/pr_supplement_new_tests.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_supplement_new_tests.yaml"
+          },
+          {
+            "name": "pr_test.yaml",
+            "path": ".github/workflows/pr_test.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_test.yaml"
+          },
+          {
+            "name": "schedule_daily_test.yaml",
+            "path": ".github/workflows/schedule_daily_test.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_daily_test.yaml"
+          },
+          {
+            "name": "schedule_doc_getting_started_test.yaml",
+            "path": ".github/workflows/schedule_doc_getting_started_test.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_doc_getting_started_test.yaml"
+          },
+          {
+            "name": "schedule_e2e_upstream_test.yaml",
+            "path": ".github/workflows/schedule_e2e_upstream_test.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_e2e_upstream_test.yaml"
+          },
+          {
+            "name": "schedule_nightly_test_310p.yaml",
+            "path": ".github/workflows/schedule_nightly_test_310p.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_nightly_test_310p.yaml"
+          },
+          {
+            "name": "schedule_nightly_test_a2.yaml",
+            "path": ".github/workflows/schedule_nightly_test_a2.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_nightly_test_a2.yaml"
+          },
+          {
+            "name": "schedule_nightly_test_a3.yaml",
+            "path": ".github/workflows/schedule_nightly_test_a3.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_nightly_test_a3.yaml"
+          },
+          {
+            "name": "schedule_nightly_test_a3_560t.yaml",
+            "path": ".github/workflows/schedule_nightly_test_a3_560t.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_nightly_test_a3_560t.yaml"
+          },
+          {
+            "name": "schedule_nightly_test_a5.yaml",
+            "path": ".github/workflows/schedule_nightly_test_a5.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_nightly_test_a5.yaml"
+          },
+          {
+            "name": "schedule_test_coverage.yaml",
+            "path": ".github/workflows/schedule_test_coverage.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_test_coverage.yaml"
+          },
+          {
+            "name": "schedule_weekly_test_310p.yaml",
+            "path": ".github/workflows/schedule_weekly_test_310p.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_weekly_test_310p.yaml"
+          },
+          {
+            "name": "schedule_weekly_test_a2.yaml",
+            "path": ".github/workflows/schedule_weekly_test_a2.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_weekly_test_a2.yaml"
+          },
+          {
+            "name": "schedule_weekly_test_a3.yaml",
+            "path": ".github/workflows/schedule_weekly_test_a3.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_weekly_test_a3.yaml"
+          },
+          {
+            "name": "schedule_weekly_test_a3_560t.yaml",
+            "path": ".github/workflows/schedule_weekly_test_a3_560t.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_weekly_test_a3_560t.yaml"
+          }
+        ],
+        "lint": [
+          {
+            "name": "schedule_doc_linkcheck.yaml",
+            "path": ".github/workflows/schedule_doc_linkcheck.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_doc_linkcheck.yaml"
+          },
+          {
+            "name": "schedule_lint_image_build.yaml",
+            "path": ".github/workflows/schedule_lint_image_build.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_lint_image_build.yaml"
+          }
+        ],
+        "docker": [
+          {
+            "name": "dockerfiles",
+            "path": ".github/workflows/dockerfiles",
+            "download_url": null
+          }
+        ],
+        "e2e": [
+          {
+            "name": "_e2e_nightly_multi_node.yaml",
+            "path": ".github/workflows/_e2e_nightly_multi_node.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_e2e_nightly_multi_node.yaml"
+          },
+          {
+            "name": "_e2e_nightly_single_node.yaml",
+            "path": ".github/workflows/_e2e_nightly_single_node.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_e2e_nightly_single_node.yaml"
+          },
+          {
+            "name": "_e2e_nightly_single_node_560t.yaml",
+            "path": ".github/workflows/_e2e_nightly_single_node_560t.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_e2e_nightly_single_node_560t.yaml"
+          },
+          {
+            "name": "_e2e_nightly_single_node_models.yaml",
+            "path": ".github/workflows/_e2e_nightly_single_node_models.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_e2e_nightly_single_node_models.yaml"
+          },
+          {
+            "name": "pr_e2e_command.yml",
+            "path": ".github/workflows/pr_e2e_command.yml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_e2e_command.yml"
+          },
+          {
+            "name": "schedule_e2e_upstream_test.yaml",
+            "path": ".github/workflows/schedule_e2e_upstream_test.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_e2e_upstream_test.yaml"
+          }
+        ],
+        "nightly": [
+          {
+            "name": "_e2e_nightly_multi_node.yaml",
+            "path": ".github/workflows/_e2e_nightly_multi_node.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_e2e_nightly_multi_node.yaml"
+          },
+          {
+            "name": "_e2e_nightly_single_node.yaml",
+            "path": ".github/workflows/_e2e_nightly_single_node.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_e2e_nightly_single_node.yaml"
+          },
+          {
+            "name": "_e2e_nightly_single_node_560t.yaml",
+            "path": ".github/workflows/_e2e_nightly_single_node_560t.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_e2e_nightly_single_node_560t.yaml"
+          },
+          {
+            "name": "_e2e_nightly_single_node_models.yaml",
+            "path": ".github/workflows/_e2e_nightly_single_node_models.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_e2e_nightly_single_node_models.yaml"
+          },
+          {
+            "name": "_nightly_image_build.yaml",
+            "path": ".github/workflows/_nightly_image_build.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_nightly_image_build.yaml"
+          },
+          {
+            "name": "_nightly_wait_for_pods_ready.yaml",
+            "path": ".github/workflows/_nightly_wait_for_pods_ready.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_nightly_wait_for_pods_ready.yaml"
+          },
+          {
+            "name": "nightly_image_build.yaml",
+            "path": ".github/workflows/nightly_image_build.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/nightly_image_build.yaml"
+          },
+          {
+            "name": "pr_nightly_command.yml",
+            "path": ".github/workflows/pr_nightly_command.yml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_nightly_command.yml"
+          },
+          {
+            "name": "schedule_nightly_test_310p.yaml",
+            "path": ".github/workflows/schedule_nightly_test_310p.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_nightly_test_310p.yaml"
+          },
+          {
+            "name": "schedule_nightly_test_a2.yaml",
+            "path": ".github/workflows/schedule_nightly_test_a2.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_nightly_test_a2.yaml"
+          },
+          {
+            "name": "schedule_nightly_test_a3.yaml",
+            "path": ".github/workflows/schedule_nightly_test_a3.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_nightly_test_a3.yaml"
+          },
+          {
+            "name": "schedule_nightly_test_a3_560t.yaml",
+            "path": ".github/workflows/schedule_nightly_test_a3_560t.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_nightly_test_a3_560t.yaml"
+          },
+          {
+            "name": "schedule_nightly_test_a5.yaml",
+            "path": ".github/workflows/schedule_nightly_test_a5.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_nightly_test_a5.yaml"
+          }
+        ],
+        "pr": [
+          {
+            "name": "bot_pr_create.yaml",
+            "path": ".github/workflows/bot_pr_create.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/bot_pr_create.yaml"
+          },
+          {
+            "name": "pr_cancel_command.yml",
+            "path": ".github/workflows/pr_cancel_command.yml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_cancel_command.yml"
+          },
+          {
+            "name": "pr_cherry_pick_command.yml",
+            "path": ".github/workflows/pr_cherry_pick_command.yml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_cherry_pick_command.yml"
+          },
+          {
+            "name": "pr_close_job.yaml",
+            "path": ".github/workflows/pr_close_job.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_close_job.yaml"
+          },
+          {
+            "name": "pr_e2e_command.yml",
+            "path": ".github/workflows/pr_e2e_command.yml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_e2e_command.yml"
+          },
+          {
+            "name": "pr_nightly_command.yml",
+            "path": ".github/workflows/pr_nightly_command.yml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_nightly_command.yml"
+          },
+          {
+            "name": "pr_rerun_command.yml",
+            "path": ".github/workflows/pr_rerun_command.yml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_rerun_command.yml"
+          },
+          {
+            "name": "pr_revert_command.yml",
+            "path": ".github/workflows/pr_revert_command.yml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_revert_command.yml"
+          },
+          {
+            "name": "pr_supplement_new_tests.yaml",
+            "path": ".github/workflows/pr_supplement_new_tests.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_supplement_new_tests.yaml"
+          },
+          {
+            "name": "pr_test.yaml",
+            "path": ".github/workflows/pr_test.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/pr_test.yaml"
+          },
+          {
+            "name": "push_build_precommit_cache.yaml",
+            "path": ".github/workflows/push_build_precommit_cache.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/push_build_precommit_cache.yaml"
+          }
+        ],
+        "deploy": [
+          {
+            "name": "schedule_release_code_and_wheel.yml",
+            "path": ".github/workflows/schedule_release_code_and_wheel.yml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_release_code_and_wheel.yml"
+          }
+        ],
+        "other": [
+          {
+            "name": "_ensure_csrc_cache.yaml",
+            "path": ".github/workflows/_ensure_csrc_cache.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/_ensure_csrc_cache.yaml"
+          },
+          {
+            "name": "bot_issue_manage.yaml",
+            "path": ".github/workflows/bot_issue_manage.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/bot_issue_manage.yaml"
+          },
+          {
+            "name": "bot_merge_conflict.yaml",
+            "path": ".github/workflows/bot_merge_conflict.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/bot_merge_conflict.yaml"
+          },
+          {
+            "name": "configs",
+            "path": ".github/workflows/configs",
+            "download_url": null
+          },
+          {
+            "name": "issue_wait_feedback_command.yml",
+            "path": ".github/workflows/issue_wait_feedback_command.yml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/issue_wait_feedback_command.yml"
+          },
+          {
+            "name": "labeled_download_model_dataset.yaml",
+            "path": ".github/workflows/labeled_download_model_dataset.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/labeled_download_model_dataset.yaml"
+          },
+          {
+            "name": "matchers",
+            "path": ".github/workflows/matchers",
+            "download_url": null
+          },
+          {
+            "name": "misc",
+            "path": ".github/workflows/misc",
+            "download_url": null
+          },
+          {
+            "name": "schedule_doc_translate.yaml",
+            "path": ".github/workflows/schedule_doc_translate.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_doc_translate.yaml"
+          },
+          {
+            "name": "schedule_main2main.yaml",
+            "path": ".github/workflows/schedule_main2main.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_main2main.yaml"
+          },
+          {
+            "name": "schedule_stale_manage.yaml",
+            "path": ".github/workflows/schedule_stale_manage.yaml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/schedule_stale_manage.yaml"
+          },
+          {
+            "name": "scripts",
+            "path": ".github/workflows/scripts",
+            "download_url": null
+          },
+          {
+            "name": "slash_command_dispatch.yml",
+            "path": ".github/workflows/slash_command_dispatch.yml",
+            "download_url": "https://raw.githubusercontent.com/vllm-project/vllm-ascend/main/.github/workflows/slash_command_dispatch.yml"
+          }
+        ]
+      }
+    },
+    {
+      "repository": "Ascend/sglang",
+      "total_workflows": 110,
+      "categories": {
+        "build": 3,
+        "test": 38,
+        "lint": 3,
+        "docker": 22,
+        "e2e": 1,
+        "nightly": 21,
+        "pr": 34,
+        "deploy": 29,
+        "other": 27
+      },
+      "workflows": {
+        "build": [
+          {
+            "name": "_docker-build-and-publish.yml",
+            "path": ".github/workflows/_docker-build-and-publish.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_docker-build-and-publish.yml"
+          },
+          {
+            "name": "_pr-test-rust-ext-build.yml",
+            "path": ".github/workflows/_pr-test-rust-ext-build.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-rust-ext-build.yml"
+          },
+          {
+            "name": "_pr-test-sgl-kernel-build.yml",
+            "path": ".github/workflows/_pr-test-sgl-kernel-build.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-sgl-kernel-build.yml"
+          }
+        ],
+        "test": [
+          {
+            "name": "_npu-pr-test-stage.yml",
+            "path": ".github/workflows/_npu-pr-test-stage.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_npu-pr-test-stage.yml"
+          },
+          {
+            "name": "_npu-single-node-test-stage.yml",
+            "path": ".github/workflows/_npu-single-node-test-stage.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_npu-single-node-test-stage.yml"
+          },
+          {
+            "name": "_pr-test-check-changes.yml",
+            "path": ".github/workflows/_pr-test-check-changes.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-check-changes.yml"
+          },
+          {
+            "name": "_pr-test-rust-ext-build.yml",
+            "path": ".github/workflows/_pr-test-rust-ext-build.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-rust-ext-build.yml"
+          },
+          {
+            "name": "_pr-test-sgl-kernel-build.yml",
+            "path": ".github/workflows/_pr-test-sgl-kernel-build.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-sgl-kernel-build.yml"
+          },
+          {
+            "name": "_pr-test-simulator-cpu.yml",
+            "path": ".github/workflows/_pr-test-simulator-cpu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-simulator-cpu.yml"
+          },
+          {
+            "name": "_pr-test-stage-cpu.yml",
+            "path": ".github/workflows/_pr-test-stage-cpu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-stage-cpu.yml"
+          },
+          {
+            "name": "_pr-test-stage.yml",
+            "path": ".github/workflows/_pr-test-stage.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-stage.yml"
+          },
+          {
+            "name": "cancel-unfinished-pr-tests.yml",
+            "path": ".github/workflows/cancel-unfinished-pr-tests.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/cancel-unfinished-pr-tests.yml"
+          },
+          {
+            "name": "full-test-npu.yml",
+            "path": ".github/workflows/full-test-npu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/full-test-npu.yml"
+          },
+          {
+            "name": "nightly-test-amd-miles-rocm10.yml",
+            "path": ".github/workflows/nightly-test-amd-miles-rocm10.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-amd-miles-rocm10.yml"
+          },
+          {
+            "name": "nightly-test-amd.yml",
+            "path": ".github/workflows/nightly-test-amd.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-amd.yml"
+          },
+          {
+            "name": "nightly-test-intel.yml",
+            "path": ".github/workflows/nightly-test-intel.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-intel.yml"
+          },
+          {
+            "name": "nightly-test-musa.yml",
+            "path": ".github/workflows/nightly-test-musa.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-musa.yml"
+          },
+          {
+            "name": "nightly-test-npu-e2e-multi-node.yml",
+            "path": ".github/workflows/nightly-test-npu-e2e-multi-node.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-npu-e2e-multi-node.yml"
+          },
+          {
+            "name": "nightly-test-npu.yml",
+            "path": ".github/workflows/nightly-test-npu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-npu.yml"
+          },
+          {
+            "name": "nightly-test-nvidia.yml",
+            "path": ".github/workflows/nightly-test-nvidia.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-nvidia.yml"
+          },
+          {
+            "name": "pr-test-amd-extra.yml",
+            "path": ".github/workflows/pr-test-amd-extra.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-amd-extra.yml"
+          },
+          {
+            "name": "pr-test-amd-mori.yml",
+            "path": ".github/workflows/pr-test-amd-mori.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-amd-mori.yml"
+          },
+          {
+            "name": "pr-test-amd.yml",
+            "path": ".github/workflows/pr-test-amd.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-amd.yml"
+          },
+          {
+            "name": "pr-test-arm64.yml",
+            "path": ".github/workflows/pr-test-arm64.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-arm64.yml"
+          },
+          {
+            "name": "pr-test-extra.yml",
+            "path": ".github/workflows/pr-test-extra.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-extra.yml"
+          },
+          {
+            "name": "pr-test-jit-kernel.yml",
+            "path": ".github/workflows/pr-test-jit-kernel.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-jit-kernel.yml"
+          },
+          {
+            "name": "pr-test-mlx.yml",
+            "path": ".github/workflows/pr-test-mlx.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-mlx.yml"
+          },
+          {
+            "name": "pr-test-multimodal-gen.yml",
+            "path": ".github/workflows/pr-test-multimodal-gen.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-multimodal-gen.yml"
+          },
+          {
+            "name": "pr-test-musa.yml",
+            "path": ".github/workflows/pr-test-musa.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-musa.yml"
+          },
+          {
+            "name": "pr-test-npu.yml",
+            "path": ".github/workflows/pr-test-npu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-npu.yml"
+          },
+          {
+            "name": "pr-test-rust-exts.yml",
+            "path": ".github/workflows/pr-test-rust-exts.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-rust-exts.yml"
+          },
+          {
+            "name": "pr-test-rust.yml",
+            "path": ".github/workflows/pr-test-rust.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-rust.yml"
+          },
+          {
+            "name": "pr-test-sgl-kernel.yml",
+            "path": ".github/workflows/pr-test-sgl-kernel.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-sgl-kernel.yml"
+          },
+          {
+            "name": "pr-test-sgl-router.yml",
+            "path": ".github/workflows/pr-test-sgl-router.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-sgl-router.yml"
+          },
+          {
+            "name": "pr-test-xeon.yml",
+            "path": ".github/workflows/pr-test-xeon.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-xeon.yml"
+          },
+          {
+            "name": "pr-test-xpu.yml",
+            "path": ".github/workflows/pr-test-xpu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-xpu.yml"
+          },
+          {
+            "name": "pr-test.yml",
+            "path": ".github/workflows/pr-test.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test.yml"
+          },
+          {
+            "name": "rerun-test.yml",
+            "path": ".github/workflows/rerun-test.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/rerun-test.yml"
+          },
+          {
+            "name": "stress-test.yml",
+            "path": ".github/workflows/stress-test.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/stress-test.yml"
+          },
+          {
+            "name": "weekly-test-cpu.yml",
+            "path": ".github/workflows/weekly-test-cpu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/weekly-test-cpu.yml"
+          },
+          {
+            "name": "weekly-test-nvidia.yml",
+            "path": ".github/workflows/weekly-test-nvidia.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/weekly-test-nvidia.yml"
+          }
+        ],
+        "lint": [
+          {
+            "name": "_pr-test-check-changes.yml",
+            "path": ".github/workflows/_pr-test-check-changes.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-check-changes.yml"
+          },
+          {
+            "name": "lint.yml",
+            "path": ".github/workflows/lint.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/lint.yml"
+          },
+          {
+            "name": "nightly-link-check.yml",
+            "path": ".github/workflows/nightly-link-check.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-link-check.yml"
+          }
+        ],
+        "docker": [
+          {
+            "name": "_docker-build-and-publish.yml",
+            "path": ".github/workflows/_docker-build-and-publish.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_docker-build-and-publish.yml"
+          },
+          {
+            "name": "_docker-cleanup-nightly.yml",
+            "path": ".github/workflows/_docker-cleanup-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_docker-cleanup-nightly.yml"
+          },
+          {
+            "name": "nightly-experimental-sgl-router-docker.yml",
+            "path": ".github/workflows/nightly-experimental-sgl-router-docker.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-experimental-sgl-router-docker.yml"
+          },
+          {
+            "name": "patch-docker-dev.yml",
+            "path": ".github/workflows/patch-docker-dev.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/patch-docker-dev.yml"
+          },
+          {
+            "name": "release-docker-amd-gfx1151-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-gfx1151-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-gfx1151-nightly.yml"
+          },
+          {
+            "name": "release-docker-amd-miles-rocm10-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-miles-rocm10-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-miles-rocm10-nightly.yml"
+          },
+          {
+            "name": "release-docker-amd-miles-rocm724-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-miles-rocm724-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-miles-rocm724-nightly.yml"
+          },
+          {
+            "name": "release-docker-amd-rocm10.yml",
+            "path": ".github/workflows/release-docker-amd-rocm10.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-rocm10.yml"
+          },
+          {
+            "name": "release-docker-amd-rocm720-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-rocm720-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-rocm720-nightly.yml"
+          },
+          {
+            "name": "release-docker-amd.yml",
+            "path": ".github/workflows/release-docker-amd.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd.yml"
+          },
+          {
+            "name": "release-docker-cu134-nightly.yml",
+            "path": ".github/workflows/release-docker-cu134-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-cu134-nightly.yml"
+          },
+          {
+            "name": "release-docker-dev.yml",
+            "path": ".github/workflows/release-docker-dev.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-dev.yml"
+          },
+          {
+            "name": "release-docker-gateway.yml",
+            "path": ".github/workflows/release-docker-gateway.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-gateway.yml"
+          },
+          {
+            "name": "release-docker-intel-xpu-nightly.yml",
+            "path": ".github/workflows/release-docker-intel-xpu-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-intel-xpu-nightly.yml"
+          },
+          {
+            "name": "release-docker-intel-xpu.yml",
+            "path": ".github/workflows/release-docker-intel-xpu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-intel-xpu.yml"
+          },
+          {
+            "name": "release-docker-npu-nightly.yml",
+            "path": ".github/workflows/release-docker-npu-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-npu-nightly.yml"
+          },
+          {
+            "name": "release-docker-npu.yml",
+            "path": ".github/workflows/release-docker-npu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-npu.yml"
+          },
+          {
+            "name": "release-docker-renderer.yml",
+            "path": ".github/workflows/release-docker-renderer.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-renderer.yml"
+          },
+          {
+            "name": "release-docker-runtime.yml",
+            "path": ".github/workflows/release-docker-runtime.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-runtime.yml"
+          },
+          {
+            "name": "release-docker-xeon.yml",
+            "path": ".github/workflows/release-docker-xeon.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-xeon.yml"
+          },
+          {
+            "name": "release-docker.yml",
+            "path": ".github/workflows/release-docker.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker.yml"
+          },
+          {
+            "name": "retag-docker.yml",
+            "path": ".github/workflows/retag-docker.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/retag-docker.yml"
+          }
+        ],
+        "e2e": [
+          {
+            "name": "nightly-test-npu-e2e-multi-node.yml",
+            "path": ".github/workflows/nightly-test-npu-e2e-multi-node.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-npu-e2e-multi-node.yml"
+          }
+        ],
+        "nightly": [
+          {
+            "name": "_docker-cleanup-nightly.yml",
+            "path": ".github/workflows/_docker-cleanup-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_docker-cleanup-nightly.yml"
+          },
+          {
+            "name": "nightly-72-gpu-gb200.yml",
+            "path": ".github/workflows/nightly-72-gpu-gb200.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-72-gpu-gb200.yml"
+          },
+          {
+            "name": "nightly-amd-mi355x-disagg.yml",
+            "path": ".github/workflows/nightly-amd-mi355x-disagg.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-amd-mi355x-disagg.yml"
+          },
+          {
+            "name": "nightly-experimental-sgl-router-docker.yml",
+            "path": ".github/workflows/nightly-experimental-sgl-router-docker.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-experimental-sgl-router-docker.yml"
+          },
+          {
+            "name": "nightly-link-check.yml",
+            "path": ".github/workflows/nightly-link-check.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-link-check.yml"
+          },
+          {
+            "name": "nightly-release-gateway.yml",
+            "path": ".github/workflows/nightly-release-gateway.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-release-gateway.yml"
+          },
+          {
+            "name": "nightly-test-amd-miles-rocm10.yml",
+            "path": ".github/workflows/nightly-test-amd-miles-rocm10.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-amd-miles-rocm10.yml"
+          },
+          {
+            "name": "nightly-test-amd.yml",
+            "path": ".github/workflows/nightly-test-amd.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-amd.yml"
+          },
+          {
+            "name": "nightly-test-intel.yml",
+            "path": ".github/workflows/nightly-test-intel.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-intel.yml"
+          },
+          {
+            "name": "nightly-test-musa.yml",
+            "path": ".github/workflows/nightly-test-musa.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-musa.yml"
+          },
+          {
+            "name": "nightly-test-npu-e2e-multi-node.yml",
+            "path": ".github/workflows/nightly-test-npu-e2e-multi-node.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-npu-e2e-multi-node.yml"
+          },
+          {
+            "name": "nightly-test-npu.yml",
+            "path": ".github/workflows/nightly-test-npu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-npu.yml"
+          },
+          {
+            "name": "nightly-test-nvidia.yml",
+            "path": ".github/workflows/nightly-test-nvidia.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-test-nvidia.yml"
+          },
+          {
+            "name": "release-docker-amd-gfx1151-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-gfx1151-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-gfx1151-nightly.yml"
+          },
+          {
+            "name": "release-docker-amd-miles-rocm10-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-miles-rocm10-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-miles-rocm10-nightly.yml"
+          },
+          {
+            "name": "release-docker-amd-miles-rocm724-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-miles-rocm724-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-miles-rocm724-nightly.yml"
+          },
+          {
+            "name": "release-docker-amd-rocm720-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-rocm720-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-rocm720-nightly.yml"
+          },
+          {
+            "name": "release-docker-cu134-nightly.yml",
+            "path": ".github/workflows/release-docker-cu134-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-cu134-nightly.yml"
+          },
+          {
+            "name": "release-docker-intel-xpu-nightly.yml",
+            "path": ".github/workflows/release-docker-intel-xpu-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-intel-xpu-nightly.yml"
+          },
+          {
+            "name": "release-docker-npu-nightly.yml",
+            "path": ".github/workflows/release-docker-npu-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-npu-nightly.yml"
+          },
+          {
+            "name": "release-pypi-nightly.yml",
+            "path": ".github/workflows/release-pypi-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-pypi-nightly.yml"
+          }
+        ],
+        "pr": [
+          {
+            "name": "_npu-pr-test-stage.yml",
+            "path": ".github/workflows/_npu-pr-test-stage.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_npu-pr-test-stage.yml"
+          },
+          {
+            "name": "_pr-test-check-changes.yml",
+            "path": ".github/workflows/_pr-test-check-changes.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-check-changes.yml"
+          },
+          {
+            "name": "_pr-test-rust-ext-build.yml",
+            "path": ".github/workflows/_pr-test-rust-ext-build.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-rust-ext-build.yml"
+          },
+          {
+            "name": "_pr-test-sgl-kernel-build.yml",
+            "path": ".github/workflows/_pr-test-sgl-kernel-build.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-sgl-kernel-build.yml"
+          },
+          {
+            "name": "_pr-test-simulator-cpu.yml",
+            "path": ".github/workflows/_pr-test-simulator-cpu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-simulator-cpu.yml"
+          },
+          {
+            "name": "_pr-test-stage-cpu.yml",
+            "path": ".github/workflows/_pr-test-stage-cpu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-stage-cpu.yml"
+          },
+          {
+            "name": "_pr-test-stage.yml",
+            "path": ".github/workflows/_pr-test-stage.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_pr-test-stage.yml"
+          },
+          {
+            "name": "cancel-pr-workflows-on-close.yml",
+            "path": ".github/workflows/cancel-pr-workflows-on-close.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/cancel-pr-workflows-on-close.yml"
+          },
+          {
+            "name": "cancel-unfinished-pr-tests.yml",
+            "path": ".github/workflows/cancel-unfinished-pr-tests.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/cancel-unfinished-pr-tests.yml"
+          },
+          {
+            "name": "close-stale-prs.yml",
+            "path": ".github/workflows/close-stale-prs.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/close-stale-prs.yml"
+          },
+          {
+            "name": "list-active-pr-runs.yml",
+            "path": ".github/workflows/list-active-pr-runs.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/list-active-pr-runs.yml"
+          },
+          {
+            "name": "open-pr-copy-from-oss.yml",
+            "path": ".github/workflows/open-pr-copy-from-oss.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/open-pr-copy-from-oss.yml"
+          },
+          {
+            "name": "open-pr-copy-to-oss.yml",
+            "path": ".github/workflows/open-pr-copy-to-oss.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/open-pr-copy-to-oss.yml"
+          },
+          {
+            "name": "pr-benchmark-rust.yml",
+            "path": ".github/workflows/pr-benchmark-rust.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-benchmark-rust.yml"
+          },
+          {
+            "name": "pr-gate.yml",
+            "path": ".github/workflows/pr-gate.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-gate.yml"
+          },
+          {
+            "name": "pr-states.yml",
+            "path": ".github/workflows/pr-states.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-states.yml"
+          },
+          {
+            "name": "pr-test-amd-extra.yml",
+            "path": ".github/workflows/pr-test-amd-extra.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-amd-extra.yml"
+          },
+          {
+            "name": "pr-test-amd-mori.yml",
+            "path": ".github/workflows/pr-test-amd-mori.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-amd-mori.yml"
+          },
+          {
+            "name": "pr-test-amd.yml",
+            "path": ".github/workflows/pr-test-amd.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-amd.yml"
+          },
+          {
+            "name": "pr-test-arm64.yml",
+            "path": ".github/workflows/pr-test-arm64.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-arm64.yml"
+          },
+          {
+            "name": "pr-test-extra.yml",
+            "path": ".github/workflows/pr-test-extra.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-extra.yml"
+          },
+          {
+            "name": "pr-test-jit-kernel.yml",
+            "path": ".github/workflows/pr-test-jit-kernel.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-jit-kernel.yml"
+          },
+          {
+            "name": "pr-test-mlx.yml",
+            "path": ".github/workflows/pr-test-mlx.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-mlx.yml"
+          },
+          {
+            "name": "pr-test-multimodal-gen.yml",
+            "path": ".github/workflows/pr-test-multimodal-gen.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-multimodal-gen.yml"
+          },
+          {
+            "name": "pr-test-musa.yml",
+            "path": ".github/workflows/pr-test-musa.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-musa.yml"
+          },
+          {
+            "name": "pr-test-npu.yml",
+            "path": ".github/workflows/pr-test-npu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-npu.yml"
+          },
+          {
+            "name": "pr-test-rust-exts.yml",
+            "path": ".github/workflows/pr-test-rust-exts.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-rust-exts.yml"
+          },
+          {
+            "name": "pr-test-rust.yml",
+            "path": ".github/workflows/pr-test-rust.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-rust.yml"
+          },
+          {
+            "name": "pr-test-sgl-kernel.yml",
+            "path": ".github/workflows/pr-test-sgl-kernel.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-sgl-kernel.yml"
+          },
+          {
+            "name": "pr-test-sgl-router.yml",
+            "path": ".github/workflows/pr-test-sgl-router.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-sgl-router.yml"
+          },
+          {
+            "name": "pr-test-xeon.yml",
+            "path": ".github/workflows/pr-test-xeon.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-xeon.yml"
+          },
+          {
+            "name": "pr-test-xpu.yml",
+            "path": ".github/workflows/pr-test-xpu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test-xpu.yml"
+          },
+          {
+            "name": "pr-test.yml",
+            "path": ".github/workflows/pr-test.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/pr-test.yml"
+          },
+          {
+            "name": "release-pypi-pr.yml",
+            "path": ".github/workflows/release-pypi-pr.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-pypi-pr.yml"
+          }
+        ],
+        "deploy": [
+          {
+            "name": "_docker-build-and-publish.yml",
+            "path": ".github/workflows/_docker-build-and-publish.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_docker-build-and-publish.yml"
+          },
+          {
+            "name": "nightly-release-gateway.yml",
+            "path": ".github/workflows/nightly-release-gateway.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/nightly-release-gateway.yml"
+          },
+          {
+            "name": "release-branch-cut.yml",
+            "path": ".github/workflows/release-branch-cut.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-branch-cut.yml"
+          },
+          {
+            "name": "release-docker-amd-gfx1151-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-gfx1151-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-gfx1151-nightly.yml"
+          },
+          {
+            "name": "release-docker-amd-miles-rocm10-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-miles-rocm10-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-miles-rocm10-nightly.yml"
+          },
+          {
+            "name": "release-docker-amd-miles-rocm724-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-miles-rocm724-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-miles-rocm724-nightly.yml"
+          },
+          {
+            "name": "release-docker-amd-rocm10.yml",
+            "path": ".github/workflows/release-docker-amd-rocm10.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-rocm10.yml"
+          },
+          {
+            "name": "release-docker-amd-rocm720-nightly.yml",
+            "path": ".github/workflows/release-docker-amd-rocm720-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd-rocm720-nightly.yml"
+          },
+          {
+            "name": "release-docker-amd.yml",
+            "path": ".github/workflows/release-docker-amd.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-amd.yml"
+          },
+          {
+            "name": "release-docker-cu134-nightly.yml",
+            "path": ".github/workflows/release-docker-cu134-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-cu134-nightly.yml"
+          },
+          {
+            "name": "release-docker-dev.yml",
+            "path": ".github/workflows/release-docker-dev.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-dev.yml"
+          },
+          {
+            "name": "release-docker-gateway.yml",
+            "path": ".github/workflows/release-docker-gateway.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-gateway.yml"
+          },
+          {
+            "name": "release-docker-intel-xpu-nightly.yml",
+            "path": ".github/workflows/release-docker-intel-xpu-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-intel-xpu-nightly.yml"
+          },
+          {
+            "name": "release-docker-intel-xpu.yml",
+            "path": ".github/workflows/release-docker-intel-xpu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-intel-xpu.yml"
+          },
+          {
+            "name": "release-docker-npu-nightly.yml",
+            "path": ".github/workflows/release-docker-npu-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-npu-nightly.yml"
+          },
+          {
+            "name": "release-docker-npu.yml",
+            "path": ".github/workflows/release-docker-npu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-npu.yml"
+          },
+          {
+            "name": "release-docker-renderer.yml",
+            "path": ".github/workflows/release-docker-renderer.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-renderer.yml"
+          },
+          {
+            "name": "release-docker-runtime.yml",
+            "path": ".github/workflows/release-docker-runtime.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-runtime.yml"
+          },
+          {
+            "name": "release-docker-xeon.yml",
+            "path": ".github/workflows/release-docker-xeon.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker-xeon.yml"
+          },
+          {
+            "name": "release-docker.yml",
+            "path": ".github/workflows/release-docker.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-docker.yml"
+          },
+          {
+            "name": "release-pypi-gateway.yml",
+            "path": ".github/workflows/release-pypi-gateway.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-pypi-gateway.yml"
+          },
+          {
+            "name": "release-pypi-nightly.yml",
+            "path": ".github/workflows/release-pypi-nightly.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-pypi-nightly.yml"
+          },
+          {
+            "name": "release-pypi-pr.yml",
+            "path": ".github/workflows/release-pypi-pr.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-pypi-pr.yml"
+          },
+          {
+            "name": "release-pypi.yml",
+            "path": ".github/workflows/release-pypi.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-pypi.yml"
+          },
+          {
+            "name": "release-tag.yml",
+            "path": ".github/workflows/release-tag.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-tag.yml"
+          },
+          {
+            "name": "release-whl-deepep.yml",
+            "path": ".github/workflows/release-whl-deepep.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-whl-deepep.yml"
+          },
+          {
+            "name": "release-whl-deepgemm.yml",
+            "path": ".github/workflows/release-whl-deepgemm.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-whl-deepgemm.yml"
+          },
+          {
+            "name": "release-whl-kernel-xpu.yml",
+            "path": ".github/workflows/release-whl-kernel-xpu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-whl-kernel-xpu.yml"
+          },
+          {
+            "name": "release-whl-kernel.yml",
+            "path": ".github/workflows/release-whl-kernel.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/release-whl-kernel.yml"
+          }
+        ],
+        "other": [
+          {
+            "name": "_npu-analyze-failure.yml",
+            "path": ".github/workflows/_npu-analyze-failure.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/_npu-analyze-failure.yml"
+          },
+          {
+            "name": "amd-aiter-scout.yml",
+            "path": ".github/workflows/amd-aiter-scout.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/amd-aiter-scout.yml"
+          },
+          {
+            "name": "amd-ci-job-monitor.yml",
+            "path": ".github/workflows/amd-ci-job-monitor.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/amd-ci-job-monitor.yml"
+          },
+          {
+            "name": "auto-tune.yml",
+            "path": ".github/workflows/auto-tune.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/auto-tune.yml"
+          },
+          {
+            "name": "bot-bump-docs-version.yml",
+            "path": ".github/workflows/bot-bump-docs-version.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/bot-bump-docs-version.yml"
+          },
+          {
+            "name": "bot-bump-flashinfer-version.yml",
+            "path": ".github/workflows/bot-bump-flashinfer-version.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/bot-bump-flashinfer-version.yml"
+          },
+          {
+            "name": "bot-bump-kernel-version-to-sglang.yml",
+            "path": ".github/workflows/bot-bump-kernel-version-to-sglang.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/bot-bump-kernel-version-to-sglang.yml"
+          },
+          {
+            "name": "bot-bump-kernel-version.yml",
+            "path": ".github/workflows/bot-bump-kernel-version.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/bot-bump-kernel-version.yml"
+          },
+          {
+            "name": "bot-bump-sglang-version.yml",
+            "path": ".github/workflows/bot-bump-sglang-version.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/bot-bump-sglang-version.yml"
+          },
+          {
+            "name": "bot-cherry-pick.yml",
+            "path": ".github/workflows/bot-cherry-pick.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/bot-cherry-pick.yml"
+          },
+          {
+            "name": "ci-auto-bisect.yml",
+            "path": ".github/workflows/ci-auto-bisect.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/ci-auto-bisect.yml"
+          },
+          {
+            "name": "ci-coverage-overview.yml",
+            "path": ".github/workflows/ci-coverage-overview.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/ci-coverage-overview.yml"
+          },
+          {
+            "name": "ci-failure-monitor.yml",
+            "path": ".github/workflows/ci-failure-monitor.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/ci-failure-monitor.yml"
+          },
+          {
+            "name": "ci-lark-notify.yml",
+            "path": ".github/workflows/ci-lark-notify.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/ci-lark-notify.yml"
+          },
+          {
+            "name": "ci-model-inventory.yml",
+            "path": ".github/workflows/ci-model-inventory.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/ci-model-inventory.yml"
+          },
+          {
+            "name": "close-inactive-issues.yml",
+            "path": ".github/workflows/close-inactive-issues.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/close-inactive-issues.yml"
+          },
+          {
+            "name": "coverage-collection-npu.yml",
+            "path": ".github/workflows/coverage-collection-npu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/coverage-collection-npu.yml"
+          },
+          {
+            "name": "diffusion-ci-gt-gen-npu.yml",
+            "path": ".github/workflows/diffusion-ci-gt-gen-npu.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/diffusion-ci-gt-gen-npu.yml"
+          },
+          {
+            "name": "diffusion-ci-gt-gen.yml",
+            "path": ".github/workflows/diffusion-ci-gt-gen.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/diffusion-ci-gt-gen.yml"
+          },
+          {
+            "name": "labeler.yml",
+            "path": ".github/workflows/labeler.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/labeler.yml"
+          },
+          {
+            "name": "runner-utilization.yml",
+            "path": ".github/workflows/runner-utilization.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/runner-utilization.yml"
+          },
+          {
+            "name": "seed-rust-ext-cache.yml",
+            "path": ".github/workflows/seed-rust-ext-cache.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/seed-rust-ext-cache.yml"
+          },
+          {
+            "name": "slash-command-handler.yml",
+            "path": ".github/workflows/slash-command-handler.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/slash-command-handler.yml"
+          },
+          {
+            "name": "sync-lmsys-sglang-blogs.yml",
+            "path": ".github/workflows/sync-lmsys-sglang-blogs.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/sync-lmsys-sglang-blogs.yml"
+          },
+          {
+            "name": "trivy-scan-dev.yml",
+            "path": ".github/workflows/trivy-scan-dev.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/trivy-scan-dev.yml"
+          },
+          {
+            "name": "weekly-update-est-time.yml",
+            "path": ".github/workflows/weekly-update-est-time.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/weekly-update-est-time.yml"
+          },
+          {
+            "name": "xpu-ci-job-monitor.yml",
+            "path": ".github/workflows/xpu-ci-job-monitor.yml",
+            "download_url": "https://raw.githubusercontent.com/Ascend/sglang/main/.github/workflows/xpu-ci-job-monitor.yml"
+          }
+        ]
+      }
+    }
+  ]
+}

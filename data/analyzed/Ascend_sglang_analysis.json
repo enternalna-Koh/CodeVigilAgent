@@ -1,0 +1,15 @@
+{
+  "issues": {
+    "total": 2,
+    "open": 1,
+    "closed": 1
+  },
+  "prs": {
+    "total": 100,
+    "open": 50,
+    "closed": 50,
+    "merged": 37,
+    "merge_rate": 0.37
+  },
+  "labels": {}
+}

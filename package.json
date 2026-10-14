@@ -1,0 +1,46 @@
+{
+  "name": "@reviewagent/cli",
+  "version": "1.0.0",
+  "description": "ReviewAgent - 智能代码审查助手，专为昇腾 NPU 生态打造",
+  "main": "index.js",
+  "bin": {
+    "review": "./bin/review.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js",
+    "test": "node bin/review.js --version"
+  },
+  "keywords": [
+    "review",
+    "code-review",
+    "ai",
+    "npu",
+    "ascend",
+    "huawei",
+    "pytorch",
+    "mindspore"
+  ],
+  "author": "ReviewAgent Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/enternalna-Koh/ReviewAgent.git"
+  },
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "inquirer": "^8.2.5",
+    "ora": "^5.4.1",
+    "boxen": "^5.1.2"
+  },
+  "preferGlobal": true,
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "homepage": "https://github.com/enternalna-Koh/ReviewAgent"
+}

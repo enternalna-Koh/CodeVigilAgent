@@ -1,0 +1,51 @@
+{
+  "summary": {
+    "total_repos": 6,
+    "total_issues": 34,
+    "total_prs": 3
+  },
+  "repositories": [
+    {
+      "name": "MindSpore",
+      "issues": 0,
+      "prs": 0,
+      "open": 0,
+      "closed": 0
+    },
+    {
+      "name": "ModelZoo-PyTorch",
+      "issues": 7,
+      "prs": 1,
+      "open": 7,
+      "closed": 0
+    },
+    {
+      "name": "AscendSpeed",
+      "issues": 3,
+      "prs": 0,
+      "open": 3,
+      "closed": 0
+    },
+    {
+      "name": "Samples",
+      "issues": 21,
+      "prs": 2,
+      "open": 9,
+      "closed": 12
+    },
+    {
+      "name": "Tools",
+      "issues": 3,
+      "prs": 0,
+      "open": 0,
+      "closed": 3
+    },
+    {
+      "name": "Crowdsource-Op",
+      "issues": 0,
+      "prs": 0,
+      "open": 0,
+      "closed": 0
+    }
+  ]
+}

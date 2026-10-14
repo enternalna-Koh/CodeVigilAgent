@@ -1,0 +1,142 @@
+{
+  "error_patterns": {
+    "OOM": [],
+    "Timeout": [
+      {
+        "number": 17923,
+        "title": "[Bug]: KV-pool lookup server thread dies silently on any handler exception, hanging the scheduler indefinitely",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/17923"
+      },
+      {
+        "number": 18178,
+        "title": "[Bug] EPLB init fails with \"HIXL EPLB register memory failed with status 103900\" when speculative decoding (draft model) + expandable_segments:True on Ascend A3",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/18178"
+      },
+      {
+        "number": 16484,
+        "title": "[Bug][A5][GLM DSpark] Runtime state changes can break compiled accuracy",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/16484"
+      }
+    ],
+    "Compatibility": [
+      {
+        "number": 10210,
+        "title": "[Bug]: Failed in a test when submitting PR to vllm_ascendv0.18.0",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/10210"
+      },
+      {
+        "number": 17731,
+        "title": "[Bug][Triton] FP8 RoPE fails to compile on Ascend 910B3 (f32 to E4M3FN)",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/17731"
+      }
+    ],
+    "CANN": [
+      {
+        "number": 14150,
+        "title": "[Contribution] 任务 #9：[Correctness] `_invalid_block_ids` 锁保护范围审计",
+        "state": "open",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/14150"
+      },
+      {
+        "number": 17923,
+        "title": "[Bug]: KV-pool lookup server thread dies silently on any handler exception, hanging the scheduler indefinitely",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/17923"
+      },
+      {
+        "number": 10210,
+        "title": "[Bug]: Failed in a test when submitting PR to vllm_ascendv0.18.0",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/10210"
+      },
+      {
+        "number": 17731,
+        "title": "[Bug][Triton] FP8 RoPE fails to compile on Ascend 910B3 (f32 to E4M3FN)",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/17731"
+      },
+      {
+        "number": 18345,
+        "title": "[Bug]:  In the A2/A3 environment, when the extract_slice API of triton-ascend is used to split data and the start address is not 32-byte aligned, data obtaining errors occur.",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/18345"
+      },
+      {
+        "number": 18178,
+        "title": "[Bug] EPLB init fails with \"HIXL EPLB register memory failed with status 103900\" when speculative decoding (draft model) + expandable_segments:True on Ascend A3",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/18178"
+      },
+      {
+        "number": 16484,
+        "title": "[Bug][A5][GLM DSpark] Runtime state changes can break compiled accuracy",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/16484"
+      },
+      {
+        "number": 16954,
+        "title": "[Doc]: GLM-5 & GLM-5.1文档latest中A3PD分离配置    --kv-cache-dtype int8 \\     --attention_config.indexer_kv_dtype int8 \\ 服务启动失败",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/16954"
+      },
+      {
+        "number": 18208,
+        "title": "[Doc]: Fine-grained TP guide's standard-TP interplay claim for embedding / LM head contradicts the code",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/18208"
+      }
+    ],
+    "Performance": [],
+    "Accuracy": [
+      {
+        "number": 18345,
+        "title": "[Bug]:  In the A2/A3 environment, when the extract_slice API of triton-ascend is used to split data and the start address is not 32-byte aligned, data obtaining errors occur.",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/18345"
+      },
+      {
+        "number": 18178,
+        "title": "[Bug] EPLB init fails with \"HIXL EPLB register memory failed with status 103900\" when speculative decoding (draft model) + expandable_segments:True on Ascend A3",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/18178"
+      },
+      {
+        "number": 16484,
+        "title": "[Bug][A5][GLM DSpark] Runtime state changes can break compiled accuracy",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/16484"
+      },
+      {
+        "number": 16954,
+        "title": "[Doc]: GLM-5 & GLM-5.1文档latest中A3PD分离配置    --kv-cache-dtype int8 \\     --attention_config.indexer_kv_dtype int8 \\ 服务启动失败",
+        "state": "closed",
+        "url": "https://github.com/vllm-project/vllm-ascend/issues/16954"
+      }
+    ]
+  },
+  "pr_patterns": {
+    "types": {
+      "other": 15,
+      "refactor": 1,
+      "feature": 16,
+      "bugfix": 10,
+      "documentation": 8
+    },
+    "stats": {
+      "total_merged": 41,
+      "avg_comments": 0.0,
+      "common_labels": {}
+    }
+  },
+  "summary": {
+    "total_issues": 10,
+    "open_issues": 2,
+    "total_prs": 50,
+    "merged_prs": 41
+  }
+}

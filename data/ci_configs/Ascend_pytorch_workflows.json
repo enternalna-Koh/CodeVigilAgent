@@ -1,0 +1,178 @@
+[
+  {
+    "name": "_build-and-test.yml",
+    "path": ".github/workflows/_build-and-test.yml",
+    "sha": "11701893ce8c359bfe5aa68b83727ea4249c8402",
+    "size": 2107,
+    "url": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/_build-and-test.yml?ref=master",
+    "html_url": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/_build-and-test.yml",
+    "git_url": "https://api.github.com/repos/Ascend/pytorch/git/blobs/11701893ce8c359bfe5aa68b83727ea4249c8402",
+    "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/_build-and-test.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/_build-and-test.yml?ref=master",
+      "git": "https://api.github.com/repos/Ascend/pytorch/git/blobs/11701893ce8c359bfe5aa68b83727ea4249c8402",
+      "html": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/_build-and-test.yml"
+    }
+  },
+  {
+    "name": "_build.yml",
+    "path": ".github/workflows/_build.yml",
+    "sha": "55a0b52dcf53d238d963bfd0ef5e1eecf10494c4",
+    "size": 4014,
+    "url": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/_build.yml?ref=master",
+    "html_url": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/_build.yml",
+    "git_url": "https://api.github.com/repos/Ascend/pytorch/git/blobs/55a0b52dcf53d238d963bfd0ef5e1eecf10494c4",
+    "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/_build.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/_build.yml?ref=master",
+      "git": "https://api.github.com/repos/Ascend/pytorch/git/blobs/55a0b52dcf53d238d963bfd0ef5e1eecf10494c4",
+      "html": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/_build.yml"
+    }
+  },
+  {
+    "name": "_fetch_and_rebase.yml",
+    "path": ".github/workflows/_fetch_and_rebase.yml",
+    "sha": "fac4ea70fce79fe32658d520d006cf87583ee2ab",
+    "size": 834,
+    "url": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/_fetch_and_rebase.yml?ref=master",
+    "html_url": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/_fetch_and_rebase.yml",
+    "git_url": "https://api.github.com/repos/Ascend/pytorch/git/blobs/fac4ea70fce79fe32658d520d006cf87583ee2ab",
+    "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/_fetch_and_rebase.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/_fetch_and_rebase.yml?ref=master",
+      "git": "https://api.github.com/repos/Ascend/pytorch/git/blobs/fac4ea70fce79fe32658d520d006cf87583ee2ab",
+      "html": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/_fetch_and_rebase.yml"
+    }
+  },
+  {
+    "name": "build-docker-images.yml",
+    "path": ".github/workflows/build-docker-images.yml",
+    "sha": "f82297057d8bbfae47b758c5c71e26db1af8f8fc",
+    "size": 4043,
+    "url": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/build-docker-images.yml?ref=master",
+    "html_url": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/build-docker-images.yml",
+    "git_url": "https://api.github.com/repos/Ascend/pytorch/git/blobs/f82297057d8bbfae47b758c5c71e26db1af8f8fc",
+    "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/build-docker-images.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/build-docker-images.yml?ref=master",
+      "git": "https://api.github.com/repos/Ascend/pytorch/git/blobs/f82297057d8bbfae47b758c5c71e26db1af8f8fc",
+      "html": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/build-docker-images.yml"
+    }
+  },
+  {
+    "name": "manual.yml",
+    "path": ".github/workflows/manual.yml",
+    "sha": "7828634345a99852e8052c23e95a451253761cce",
+    "size": 991,
+    "url": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/manual.yml?ref=master",
+    "html_url": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/manual.yml",
+    "git_url": "https://api.github.com/repos/Ascend/pytorch/git/blobs/7828634345a99852e8052c23e95a451253761cce",
+    "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/manual.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/manual.yml?ref=master",
+      "git": "https://api.github.com/repos/Ascend/pytorch/git/blobs/7828634345a99852e8052c23e95a451253761cce",
+      "html": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/manual.yml"
+    }
+  },
+  {
+    "name": "periodic.yml",
+    "path": ".github/workflows/periodic.yml",
+    "sha": "6a714bb961e1a015f4ce4ee2a9fc36ba935daa5b",
+    "size": 615,
+    "url": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/periodic.yml?ref=master",
+    "html_url": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/periodic.yml",
+    "git_url": "https://api.github.com/repos/Ascend/pytorch/git/blobs/6a714bb961e1a015f4ce4ee2a9fc36ba935daa5b",
+    "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/periodic.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/periodic.yml?ref=master",
+      "git": "https://api.github.com/repos/Ascend/pytorch/git/blobs/6a714bb961e1a015f4ce4ee2a9fc36ba935daa5b",
+      "html": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/periodic.yml"
+    }
+  },
+  {
+    "name": "pytorch_ci_trigger_pr.yml",
+    "path": ".github/workflows/pytorch_ci_trigger_pr.yml",
+    "sha": "6b3e9d641404738637c68a7bf55c2699121a1e4a",
+    "size": 994,
+    "url": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/pytorch_ci_trigger_pr.yml?ref=master",
+    "html_url": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/pytorch_ci_trigger_pr.yml",
+    "git_url": "https://api.github.com/repos/Ascend/pytorch/git/blobs/6b3e9d641404738637c68a7bf55c2699121a1e4a",
+    "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/pytorch_ci_trigger_pr.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/pytorch_ci_trigger_pr.yml?ref=master",
+      "git": "https://api.github.com/repos/Ascend/pytorch/git/blobs/6b3e9d641404738637c68a7bf55c2699121a1e4a",
+      "html": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/pytorch_ci_trigger_pr.yml"
+    }
+  },
+  {
+    "name": "pytorch_ci_trigger_precise.yml",
+    "path": ".github/workflows/pytorch_ci_trigger_precise.yml",
+    "sha": "e52394ed89578a6b129c8e3221359cddda6c09f9",
+    "size": 777,
+    "url": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/pytorch_ci_trigger_precise.yml?ref=master",
+    "html_url": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/pytorch_ci_trigger_precise.yml",
+    "git_url": "https://api.github.com/repos/Ascend/pytorch/git/blobs/e52394ed89578a6b129c8e3221359cddda6c09f9",
+    "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/pytorch_ci_trigger_precise.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/pytorch_ci_trigger_precise.yml?ref=master",
+      "git": "https://api.github.com/repos/Ascend/pytorch/git/blobs/e52394ed89578a6b129c8e3221359cddda6c09f9",
+      "html": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/pytorch_ci_trigger_precise.yml"
+    }
+  },
+  {
+    "name": "pytorch_ci_trigger_push.yml",
+    "path": ".github/workflows/pytorch_ci_trigger_push.yml",
+    "sha": "cab66392cb26d51dd3e2d46bf137ef2a72ef2cd2",
+    "size": 982,
+    "url": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/pytorch_ci_trigger_push.yml?ref=master",
+    "html_url": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/pytorch_ci_trigger_push.yml",
+    "git_url": "https://api.github.com/repos/Ascend/pytorch/git/blobs/cab66392cb26d51dd3e2d46bf137ef2a72ef2cd2",
+    "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/pytorch_ci_trigger_push.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/pytorch_ci_trigger_push.yml?ref=master",
+      "git": "https://api.github.com/repos/Ascend/pytorch/git/blobs/cab66392cb26d51dd3e2d46bf137ef2a72ef2cd2",
+      "html": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/pytorch_ci_trigger_push.yml"
+    }
+  },
+  {
+    "name": "pytorch_coverage_nightly.yml",
+    "path": ".github/workflows/pytorch_coverage_nightly.yml",
+    "sha": "983f60a0c21221f9733ee0004f138beeab04915b",
+    "size": 1237,
+    "url": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/pytorch_coverage_nightly.yml?ref=master",
+    "html_url": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/pytorch_coverage_nightly.yml",
+    "git_url": "https://api.github.com/repos/Ascend/pytorch/git/blobs/983f60a0c21221f9733ee0004f138beeab04915b",
+    "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/pytorch_coverage_nightly.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/pytorch_coverage_nightly.yml?ref=master",
+      "git": "https://api.github.com/repos/Ascend/pytorch/git/blobs/983f60a0c21221f9733ee0004f138beeab04915b",
+      "html": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/pytorch_coverage_nightly.yml"
+    }
+  },
+  {
+    "name": "torch-npu-v2-7-1-upstream-test-trigger.yml",
+    "path": ".github/workflows/torch-npu-v2-7-1-upstream-test-trigger.yml",
+    "sha": "b3a0eebe941b2b1bda75615bd3be4e762a6ff33a",
+    "size": 1023,
+    "url": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/torch-npu-v2-7-1-upstream-test-trigger.yml?ref=master",
+    "html_url": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/torch-npu-v2-7-1-upstream-test-trigger.yml",
+    "git_url": "https://api.github.com/repos/Ascend/pytorch/git/blobs/b3a0eebe941b2b1bda75615bd3be4e762a6ff33a",
+    "download_url": "https://raw.githubusercontent.com/Ascend/pytorch/master/.github/workflows/torch-npu-v2-7-1-upstream-test-trigger.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Ascend/pytorch/contents/.github/workflows/torch-npu-v2-7-1-upstream-test-trigger.yml?ref=master",
+      "git": "https://api.github.com/repos/Ascend/pytorch/git/blobs/b3a0eebe941b2b1bda75615bd3be4e762a6ff33a",
+      "html": "https://github.com/Ascend/pytorch/blob/master/.github/workflows/torch-npu-v2-7-1-upstream-test-trigger.yml"
+    }
+  }
+]

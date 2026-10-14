@@ -1,0 +1,6 @@
+# Ignore editor / OS junk; keep the skill sources tracked.
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

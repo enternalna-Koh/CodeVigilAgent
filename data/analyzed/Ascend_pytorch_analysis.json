@@ -1,0 +1,609 @@
+{
+  "error_patterns": {
+    "OOM": [
+      {
+        "number": 101,
+        "title": "SFTTrainer Out of Memory: Full-parameter fine-tuning on 8*910B (64G) for long context model Qwen3-4B-Instruct-2507.",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/101"
+      }
+    ],
+    "Timeout": [
+      {
+        "number": 166,
+        "title": "ProcessGroupHCCL creation fails with fftsplus SDMA device error (507049) when another process uses CaMem sleep mode on the same NPU",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/166"
+      },
+      {
+        "number": 154,
+        "title": "[Bug]: torch.compile在编译时会出现硬件访问超时问题",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/154"
+      },
+      {
+        "number": 153,
+        "title": "[Bug]: 310P 布尔掩码 index_put_ 导致设备上下文崩溃（aicpu 错误 507018）",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/153"
+      },
+      {
+        "number": 150,
+        "title": "[bug] interpolate doesn't work with small scale_factor values",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/150"
+      },
+      {
+        "number": 144,
+        "title": "torch_npu 2.10 + CANN 9.0 on soc_version 104: torch.nn.functional.linear fails with MatMul/TransData",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/144"
+      },
+      {
+        "number": 107,
+        "title": "Acend 910b和 nvidia H20 相同超参数，同一条训练数据， 对qwen-3vl-8b sft训练forward阶段loss差距在1%以内，backward后最后一层(35层)main_grad的误差小于1%， 传播到第一层 main_grad误差超50%-100%+",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/107"
+      },
+      {
+        "number": 54,
+        "title": "环境变量设置HCCL_EXEC_TIMEOUT=0不生效",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/54"
+      },
+      {
+        "number": 49,
+        "title": "昇腾310p LLM推理报错：RuntimeError: copy_d2d:build/CMakeFiles/torch_npu.dir/compiler_depend.ts:104 NPU function error: ",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/49"
+      }
+    ],
+    "Compatibility": [
+      {
+        "number": 148,
+        "title": "torch_npu 2.1.0 + CANN 8.0.0 在昇腾910B上微调Qwen3-ASR 模型",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/148"
+      },
+      {
+        "number": 56,
+        "title": "torch.nn.MaxPool1d 类似算子的支持",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/56"
+      },
+      {
+        "number": 144,
+        "title": "torch_npu 2.10 + CANN 9.0 on soc_version 104: torch.nn.functional.linear fails with MatMul/TransData",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/144"
+      },
+      {
+        "number": 139,
+        "title": "RFC: 为 torch_npu MemPool 增加 `sub_block_alignment` 参数",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/139"
+      },
+      {
+        "number": 3,
+        "title": "Unsupported data type for HCCL process group",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/3"
+      }
+    ],
+    "CANN": [
+      {
+        "number": 170,
+        "title": "os.environ.get取值异常",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/170"
+      },
+      {
+        "number": 167,
+        "title": "torch_npu.profiler 在 warmup → RECORD 跃迁时丢失窗口头部的设备侧数据，实际采集次数少于 active",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/167"
+      },
+      {
+        "number": 166,
+        "title": "ProcessGroupHCCL creation fails with fftsplus SDMA device error (507049) when another process uses CaMem sleep mode on the same NPU",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/166"
+      },
+      {
+        "number": 163,
+        "title": "[Bug]: NPU 环境下 Dynamo 处理零参数 id() 时抛出 IndexError 而非 TypeError，与 PyTorch 原生行为不一致，影响设备测试解耦",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/163"
+      },
+      {
+        "number": 147,
+        "title": "【bug】torch_npu不支持flex_attention，使用flex_attention进行训练会报错",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/147"
+      },
+      {
+        "number": 133,
+        "title": "torch_npu profiler 输出的 trace JSON 与 Perfetto 不兼容：ts 为字符串类型 + 绝对时间戳导致精度丢失",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/133"
+      },
+      {
+        "number": 158,
+        "title": "[Requirement] 支持torch.uint64在npu上的相关计算",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/158"
+      },
+      {
+        "number": 157,
+        "title": "[feat] is_cuda设计意义不明",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/157"
+      },
+      {
+        "number": 154,
+        "title": "[Bug]: torch.compile在编译时会出现硬件访问超时问题",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/154"
+      },
+      {
+        "number": 153,
+        "title": "[Bug]: 310P 布尔掩码 index_put_ 导致设备上下文崩溃（aicpu 错误 507018）",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/153"
+      },
+      {
+        "number": 150,
+        "title": "[bug] interpolate doesn't work with small scale_factor values",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/150"
+      },
+      {
+        "number": 148,
+        "title": "torch_npu 2.1.0 + CANN 8.0.0 在昇腾910B上微调Qwen3-ASR 模型",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/148"
+      },
+      {
+        "number": 56,
+        "title": "torch.nn.MaxPool1d 类似算子的支持",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/56"
+      },
+      {
+        "number": 94,
+        "title": "LinearOperation CreateOperation failed",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/94"
+      },
+      {
+        "number": 140,
+        "title": "算子launch线程数量有误，全部由acl_thread进行算子下发",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/140"
+      },
+      {
+        "number": 144,
+        "title": "torch_npu 2.10 + CANN 9.0 on soc_version 104: torch.nn.functional.linear fails with MatMul/TransData",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/144"
+      },
+      {
+        "number": 139,
+        "title": "RFC: 为 torch_npu MemPool 增加 `sub_block_alignment` 参数",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/139"
+      },
+      {
+        "number": 130,
+        "title": "CANN 9.0 Support",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/130"
+      },
+      {
+        "number": 128,
+        "title": "torch.zero_ in compile",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/128"
+      },
+      {
+        "number": 125,
+        "title": "[Bug] ATC allow_mix_precision / allow_fp32_to_fp16 在 SAM3 vision encoder FPN neck 上造成灾难性精度崩溃 (与 torch_npu fp16 行为不一致)",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/125"
+      },
+      {
+        "number": 123,
+        "title": "torch_npu/_inductor 中 MLIRProcessor 使用 shell=True 执行由环境变量拼接的命令，存在条件性命令注入风险",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/123"
+      },
+      {
+        "number": 99,
+        "title": "torch_npu2.7.1 和CANN 8.3.RC1不兼容",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/99"
+      },
+      {
+        "number": 93,
+        "title": "Support out_dtype in torch.bmm",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/93"
+      },
+      {
+        "number": 109,
+        "title": "Question: 在torch.npu的使用环境下，通过pytorch官方文档实现的自定义的Process Group Backend会有效果吗？",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/109"
+      },
+      {
+        "number": 108,
+        "title": "执行deepseekv3.2-exp模型量化报错：torch_npu.memory: [ERROR] [269128] Get a block from the existing pool failed. Try to free cached blocks and reallocate. This error log can be ignored.",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/108"
+      },
+      {
+        "number": 103,
+        "title": "DataLoader加载数据集时遇到：AttributeError: '_MultiProcessingDataLoaderIter' object has no attribute '_in_order'",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/103"
+      },
+      {
+        "number": 105,
+        "title": "需要一个torch-npu  2.9.1版本",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/105"
+      },
+      {
+        "number": 107,
+        "title": "Acend 910b和 nvidia H20 相同超参数，同一条训练数据， 对qwen-3vl-8b sft训练forward阶段loss差距在1%以内，backward后最后一层(35层)main_grad的误差小于1%， 传播到第一层 main_grad误差超50%-100%+",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/107"
+      },
+      {
+        "number": 102,
+        "title": "对HSTU模型启用编译，编译 layer_norm 和 addmm_silu 算子报错 error: ub overflow",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/102"
+      },
+      {
+        "number": 97,
+        "title": "对HSTU模型启用编译报错 No module named 'torch._inductor.triton_heuristics'",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/97"
+      },
+      {
+        "number": 54,
+        "title": "环境变量设置HCCL_EXEC_TIMEOUT=0不生效",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/54"
+      },
+      {
+        "number": 98,
+        "title": "补图过多导致压测卡死",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/98"
+      },
+      {
+        "number": 96,
+        "title": "910b多进程出现RuntimeError: devptr INTERNAL ASSERT FAILED",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/96"
+      },
+      {
+        "number": 69,
+        "title": "F.interpolate on NPU is REALLY slow, even slower than CPU",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/69"
+      },
+      {
+        "number": 171,
+        "title": "[Bug]: triton_experimental codegen fold pass 基准名单未展开别名节点，融合内核全配置编译失败",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/171"
+      },
+      {
+        "number": 100,
+        "title": "模型是否支持FP8格式模型推理？",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/100"
+      },
+      {
+        "number": 162,
+        "title": "Test for ascendbot",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/162"
+      },
+      {
+        "number": 159,
+        "title": "Test for ascendbot",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/159"
+      },
+      {
+        "number": 161,
+        "title": "Test for ascendbot",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/161"
+      },
+      {
+        "number": 160,
+        "title": "Test for ascendbot",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/160"
+      },
+      {
+        "number": 149,
+        "title": "[CI Break] torch_npu 编译失败：torchgen 无法识别已删除的 Dimname 类型",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/149"
+      },
+      {
+        "number": 104,
+        "title": "pytorch-npu hosting website description update",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/104"
+      },
+      {
+        "number": 90,
+        "title": "RuntimeError: copy_d2d_baseformat_opapi:build/CMakeFiles/torch_npu.dir/compiler_depend.ts:88 NPU function error: call aclnnInplaceCopy failed, error code is 561103",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/90"
+      },
+      {
+        "number": 88,
+        "title": "scaled_dot_product_attention does not work correctly when attn_mask is in bool type",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/88"
+      },
+      {
+        "number": 80,
+        "title": "How to replace enable_xformers_memory_efficient_attention in xformers？",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/80"
+      },
+      {
+        "number": 81,
+        "title": "910B pytorch在transformers, diffuser, wan2.1，cogvideo等package上加载，推理缓慢问题",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/81"
+      },
+      {
+        "number": 74,
+        "title": "fatal error: 'cstdint' file not found",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/74"
+      },
+      {
+        "number": 49,
+        "title": "昇腾310p LLM推理报错：RuntimeError: copy_d2d:build/CMakeFiles/torch_npu.dir/compiler_depend.ts:104 NPU function error: ",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/49"
+      },
+      {
+        "number": 38,
+        "title": "euleros based系统上无法通过pip安装 torch-npu",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/38"
+      },
+      {
+        "number": 37,
+        "title": "import torch_npu时报错：AttributeError: module 'torch_npu.dynamo.torchair' has no attribute 'get_npu_backend'",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/37"
+      },
+      {
+        "number": 25,
+        "title": "有类似flash-attn的npu实现吗？F.scaled_dot_product_attention？",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/25"
+      },
+      {
+        "number": 30,
+        "title": "请问op_pulgin的最终实现在哪？",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/30"
+      },
+      {
+        "number": 13,
+        "title": "不支持多线程并发执行，cuda 版本我看是可以的",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/13"
+      }
+    ],
+    "Performance": [
+      {
+        "number": 154,
+        "title": "[Bug]: torch.compile在编译时会出现硬件访问超时问题",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/154"
+      },
+      {
+        "number": 148,
+        "title": "torch_npu 2.1.0 + CANN 8.0.0 在昇腾910B上微调Qwen3-ASR 模型",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/148"
+      },
+      {
+        "number": 125,
+        "title": "[Bug] ATC allow_mix_precision / allow_fp32_to_fp16 在 SAM3 vision encoder FPN neck 上造成灾难性精度崩溃 (与 torch_npu fp16 行为不一致)",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/125"
+      },
+      {
+        "number": 69,
+        "title": "F.interpolate on NPU is REALLY slow, even slower than CPU",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/69"
+      },
+      {
+        "number": 100,
+        "title": "模型是否支持FP8格式模型推理？",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/100"
+      }
+    ],
+    "Accuracy": [
+      {
+        "number": 170,
+        "title": "os.environ.get取值异常",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/170"
+      },
+      {
+        "number": 166,
+        "title": "ProcessGroupHCCL creation fails with fftsplus SDMA device error (507049) when another process uses CaMem sleep mode on the same NPU",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/166"
+      },
+      {
+        "number": 154,
+        "title": "[Bug]: torch.compile在编译时会出现硬件访问超时问题",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/154"
+      },
+      {
+        "number": 150,
+        "title": "[bug] interpolate doesn't work with small scale_factor values",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/150"
+      },
+      {
+        "number": 148,
+        "title": "torch_npu 2.1.0 + CANN 8.0.0 在昇腾910B上微调Qwen3-ASR 模型",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/148"
+      },
+      {
+        "number": 56,
+        "title": "torch.nn.MaxPool1d 类似算子的支持",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/56"
+      },
+      {
+        "number": 94,
+        "title": "LinearOperation CreateOperation failed",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/94"
+      },
+      {
+        "number": 144,
+        "title": "torch_npu 2.10 + CANN 9.0 on soc_version 104: torch.nn.functional.linear fails with MatMul/TransData",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/144"
+      },
+      {
+        "number": 125,
+        "title": "[Bug] ATC allow_mix_precision / allow_fp32_to_fp16 在 SAM3 vision encoder FPN neck 上造成灾难性精度崩溃 (与 torch_npu fp16 行为不一致)",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/125"
+      },
+      {
+        "number": 121,
+        "title": "【feature】当配置为cuda和nccl时，ptx 不支持 创建通信域",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/121"
+      },
+      {
+        "number": 103,
+        "title": "DataLoader加载数据集时遇到：AttributeError: '_MultiProcessingDataLoaderIter' object has no attribute '_in_order'",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/103"
+      },
+      {
+        "number": 107,
+        "title": "Acend 910b和 nvidia H20 相同超参数，同一条训练数据， 对qwen-3vl-8b sft训练forward阶段loss差距在1%以内，backward后最后一层(35层)main_grad的误差小于1%， 传播到第一层 main_grad误差超50%-100%+",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/107"
+      },
+      {
+        "number": 102,
+        "title": "对HSTU模型启用编译，编译 layer_norm 和 addmm_silu 算子报错 error: ub overflow",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/102"
+      },
+      {
+        "number": 97,
+        "title": "对HSTU模型启用编译报错 No module named 'torch._inductor.triton_heuristics'",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/97"
+      },
+      {
+        "number": 54,
+        "title": "环境变量设置HCCL_EXEC_TIMEOUT=0不生效",
+        "state": "open",
+        "url": "https://github.com/Ascend/pytorch/issues/54"
+      },
+      {
+        "number": 171,
+        "title": "[Bug]: triton_experimental codegen fold pass 基准名单未展开别名节点，融合内核全配置编译失败",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/171"
+      },
+      {
+        "number": 100,
+        "title": "模型是否支持FP8格式模型推理？",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/100"
+      },
+      {
+        "number": 104,
+        "title": "pytorch-npu hosting website description update",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/104"
+      },
+      {
+        "number": 88,
+        "title": "scaled_dot_product_attention does not work correctly when attn_mask is in bool type",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/88"
+      },
+      {
+        "number": 80,
+        "title": "How to replace enable_xformers_memory_efficient_attention in xformers？",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/80"
+      },
+      {
+        "number": 74,
+        "title": "fatal error: 'cstdint' file not found",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/74"
+      },
+      {
+        "number": 49,
+        "title": "昇腾310p LLM推理报错：RuntimeError: copy_d2d:build/CMakeFiles/torch_npu.dir/compiler_depend.ts:104 NPU function error: ",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/49"
+      },
+      {
+        "number": 38,
+        "title": "euleros based系统上无法通过pip安装 torch-npu",
+        "state": "closed",
+        "url": "https://github.com/Ascend/pytorch/issues/38"
+      }
+    ]
+  },
+  "pr_patterns": {
+    "types": {
+      "bugfix": 3,
+      "other": 19,
+      "feature": 2,
+      "documentation": 1,
+      "refactor": 1
+    },
+    "stats": {
+      "total_merged": 2,
+      "avg_comments": 0.0,
+      "common_labels": {
+        "ascend-cla/no": 11,
+        "ascend-cla/yes": 14
+      }
+    }
+  },
+  "summary": {
+    "total_issues": 64,
+    "open_issues": 40,
+    "total_prs": 26,
+    "merged_prs": 2
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "provider": "deepseek",
+  "api_key": "YOUR_API_KEY_HERE",
+  "model": "deepseek-chat",
+  "base_url": "",
+
+  "available_providers": {
+    "deepseek": {
+      "models": ["deepseek-chat", "deepseek-coder"],
+      "api_url": "https://api.deepseek.com/v1/chat/completions"
+    },
+    "openai": {
+      "models": ["gpt-4", "gpt-3.5-turbo", "gpt-4-turbo"],
+      "api_url": "https://api.openai.com/v1/chat/completions"
+    },
+    "claude": {
+      "models": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
+      "api_url": "https://api.anthropic.com/v1/messages"
+    },
+    "glm": {
+      "models": ["glm-4", "glm-3-turbo"],
+      "api_url": "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    }
+  },
+
+  "comments": {
+    "usage": "1. 修改 api_key 为你的实际密钥",
+    "providers": "2. 切换 provider 和 model",
+    "openai_compatible": "3. OpenAI 兼容 API 设置 base_url",
+    "security": "4. 不要提交此文件到 Git (已在 .gitignore)"
+  }
+}
