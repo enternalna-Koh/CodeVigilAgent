@@ -157,6 +157,12 @@ class ConversationAgent:
         self.network = network
         self.searcher = searcher if searcher is not None else WebSearcher()
         self.last_tools = []
+        # 最近一次 answer() 是否产出了模型回答；一次性 CLI 据此决定退出码，不用解析回复文字
+        self.last_ok = True
+
+    def _fail(self, message):
+        self.last_ok = False
+        return message
 
     @property
     def context_summary(self):
@@ -245,13 +251,14 @@ class ConversationAgent:
         if not text:
             return ''
         self.last_tools = []
+        self.last_ok = True
         urls = list(dict.fromkeys(url.rstrip('.,;:!?，。；：！？）)]>') for url in
                                  re.findall(r'https?://[^\s<>"`\u4e00-\u9fff]+', text)))
         if len(urls) > 3:
-            return '一次最多分析 3 个链接，请分批发送。'
+            return self._fail('一次最多分析 3 个链接，请分批发送。')
         if urls:
             if self.network == 'off':
-                return '联网已关闭，未获取链接内容。输入 /network auto 开启，或直接粘贴 PR/Issue 正文。'
+                return self._fail('联网已关闭，未获取链接内容。输入 /network auto 开启，或直接粘贴 PR/Issue 正文。')
             fetched = []
             failures = []
             for url in urls:
@@ -264,7 +271,7 @@ class ConversationAgent:
                     fetched.append(bound_context(data))
             if not fetched:
                 # Keep the previous context, but never ask the model to review it as the failed URL.
-                return '无法分析这些链接：\n' + '\n'.join(failures)
+                return self._fail('无法分析这些链接：\n' + '\n'.join(failures))
             self.contexts = fetched
         else:
             failures = []
@@ -283,9 +290,10 @@ class ConversationAgent:
         try:
             response = self.client.chat_with_history(messages, temperature=0.3, max_tokens=3000)
         except Exception:
-            return 'AI 请求异常，已保留获取的上下文；请检查网络或服务配置后重试。'
+            return self._fail('AI 请求异常，已保留获取的上下文；请检查网络或服务配置后重试。')
         if not isinstance(response, str) or response.startswith('Error:'):
-            return 'AI 调用失败，已保留获取的上下文，可以重试。' + ('\n' + response if isinstance(response, str) else '')
+            return self._fail('AI 调用失败，已保留获取的上下文，可以重试。' +
+                              ('\n' + response if isinstance(response, str) else ''))
         self.history.extend([{'role': 'user', 'content': text[:8000]},
                              {'role': 'assistant', 'content': response[:12000]}])
         self.history = self.history[-8:]

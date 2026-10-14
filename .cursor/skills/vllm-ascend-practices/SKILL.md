@@ -33,10 +33,14 @@ Ascend 910B / A2
 
 | vLLM-Ascend | PyTorch | torch-npu | CANN | 硬件 |
 |-------------|---------|-----------|------|------|
-| 0.23.0 | 2.1.0 | 2.1.0.post6 | 8.0.RC2+ | 910B/A2 |
-| 0.21.0rc | 2.1.0 | 2.1.0.post3 | 8.0.RC1+ | 910B |
-| 0.18.0 | 2.0.1 | 2.0.1.post6 | 7.3.0+ | 910B |
-| 0.11.0 | 2.0.1 | 2.0.1.post3 | 7.0.0+ | 910B |
+| 0.23.0 / 0.23.0.post1 | 2.10.0 | 2.10.0.post4 | 未核验 | 未核验 |
+| 0.21.0rc1 | 2.10.0 | 2.10.0 | 未核验 | 未核验 |
+| 0.18.0 | 2.9.0 | 2.9.0 | 未核验 | 未核验 |
+| 0.11.0 | 2.7.1 | 2.7.1 | 未核验 | 未核验 |
+
+来源：PyPI 各版本发布元数据 `https://pypi.org/pypi/vllm-ascend/<版本>/json` 的 `requires_dist`（项目主页 `vllm-project/vllm-ascend`），核验日期 2026-10-14。
+PyTorch / torch-npu 两列是这些发布包声明的精确依赖（`==`）；CANN 与硬件不在 PyPI 元数据中，未核验，请以对应版本官方文档为准。
+升级 vLLM-Ascend 后必须重新对照该版本的 `requires_dist`，不要沿用旧版本的 torch-npu 版本号。
 
 **兼容性检查**
 
@@ -71,12 +75,12 @@ pip show torch-npu
 # 2. 确认 CANN 版本匹配
 ls /usr/local/Ascend/ascend-toolkit/
 
-# 3. 安装匹配版本（示例）
+# 3. 安装匹配版本（示例，版本取自 PyPI vllm-ascend 0.23.0 的 requires_dist）
 pip uninstall torch torch-npu -y
-pip install torch==2.1.0
-pip install torch-npu==2.1.0.post6
+pip install torch==2.10.0
+pip install torch-npu==2.10.0.post4
 
-# 4. 安装 vllm-ascend
+# 4. 安装 vllm-ascend（该版本要求 Python >=3.10）
 pip install vllm-ascend==0.23.0
 ```
 

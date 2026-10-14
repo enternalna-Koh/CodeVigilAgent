@@ -20,6 +20,74 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.ai_adapter import get_ai_client
 from scripts.knowledge_search import KnowledgeSearch, PROJECT_ROOT
 
+_HUNK_HEADER = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@')
+SEVERITIES = ('critical', 'high', 'medium', 'low')
+RECOMMENDATIONS = ('approve', 'request_changes', 'comment')
+
+
+def added_lines(diff: str) -> List[tuple]:
+    """解析 unified diff，返回新增行 [(文件, 新文件行号, 文本)]。
+
+    删除行、上下文行和文件头都不返回，规则只应检查改动后新写入的代码。
+    """
+    result = []
+    path, line_no = None, None
+    for raw in diff.splitlines():
+        if raw.startswith('diff --git '):
+            path, line_no = None, None
+        elif line_no is None:
+            # 还没进入 hunk：只在文件头区域解析 +++ 路径，避免把内容为 "++ x" 的新增行误当文件头
+            if raw.startswith('+++ '):
+                target = raw[4:].split('\t')[0].strip('"')
+                path = None if target == '/dev/null' else (target[2:] if target.startswith('b/') else target)
+            elif raw.startswith('@@'):
+                match = _HUNK_HEADER.match(raw)
+                line_no = int(match.group(1)) if match else None
+        elif raw.startswith('@@'):
+            match = _HUNK_HEADER.match(raw)
+            line_no = int(match.group(1)) if match else None
+        elif raw.startswith('+'):
+            result.append((path, line_no, raw[1:]))
+            line_no += 1
+        elif raw.startswith('-') or raw.startswith('\\'):
+            continue  # 删除行不占新文件行号；"\ No newline at end of file" 是标记行
+        else:
+            line_no += 1  # 上下文行
+    return result
+
+
+def validate_ai_result(result) -> Dict:
+    """校验并规范化模型返回的审查 JSON；格式不符合约定时抛出 ValueError。
+
+    只能解析出 JSON 不代表审查成功：`{}` 或 issues 类型错误都不能被当成"没有问题"。
+    """
+    if not isinstance(result, dict):
+        raise ValueError(f'AI 返回的 JSON 顶层必须是对象，实际是 {type(result).__name__}')
+    if 'issues' not in result:
+        raise ValueError('AI 返回缺少 issues 字段')
+    issues = result['issues']
+    if not isinstance(issues, list):
+        raise ValueError(f'issues 必须是数组，实际是 {type(issues).__name__}')
+    for index, issue in enumerate(issues, 1):
+        if not isinstance(issue, dict):
+            raise ValueError(f'issues[{index}] 必须是对象，实际是 {type(issue).__name__}')
+        severity = issue.get('severity')
+        if not isinstance(severity, str) or severity.strip().lower() not in SEVERITIES:
+            raise ValueError(f'issues[{index}].severity 必须是 {"/".join(SEVERITIES)} 之一，实际是 {severity!r}')
+        issue['severity'] = severity.strip().lower()
+        if not any(isinstance(issue.get(key), str) and issue[key].strip() for key in ('title', 'description')):
+            raise ValueError(f'issues[{index}] 缺少 title 或 description')
+    if 'positive_points' in result and not isinstance(result['positive_points'], list):
+        raise ValueError('positive_points 必须是数组')
+    if 'overall_assessment' in result and not isinstance(result['overall_assessment'], str):
+        raise ValueError('overall_assessment 必须是字符串')
+    if 'recommendation' in result:
+        recommendation = result['recommendation']
+        if not isinstance(recommendation, str) or recommendation.strip().lower() not in RECOMMENDATIONS:
+            raise ValueError(f'recommendation 必须是 {"/".join(RECOMMENDATIONS)} 之一，实际是 {recommendation!r}')
+        result['recommendation'] = recommendation.strip().lower()
+    return result
+
 
 class SmartReviewer:
     """智能审查器 - 自动识别、匹配、审查"""
@@ -35,35 +103,32 @@ class SmartReviewer:
             if verbose:
                 print("⚠️  AI 未配置，将使用规则引擎")
 
-        # 加载知识库
+        # 加载知识库；缺失的数据文件记入 data_warnings，不静默当作空数据
+        self.data_warnings: List[str] = []
         self.ci_rules = self._load_ci_rules()
         self.review_patterns = self._load_review_patterns()
         self.issue_knowledge = self._load_issue_knowledge()
         self.knowledge_search = knowledge_search if knowledge_search is not None else KnowledgeSearch()
 
+    def _load_json(self, relative_path: str, label: str) -> Dict:
+        path = PROJECT_ROOT / relative_path
+        if not path.exists():
+            self.data_warnings.append(f'{label}数据文件不存在，已按空数据处理: {relative_path}')
+            return {}
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+
     def _load_ci_rules(self) -> Dict:
         """加载 CI 规则"""
-        ci_file = PROJECT_ROOT / 'data/training/ci_rules/ci_rules_database.json'
-        if os.path.exists(ci_file):
-            with open(ci_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {}
+        return self._load_json('data/training/ci_rules/ci_rules_database.json', 'CI 规则')
 
     def _load_review_patterns(self) -> Dict:
         """加载 review 模式"""
-        review_file = PROJECT_ROOT / 'data/training/reviews/analyzed_reviews.json'
-        if os.path.exists(review_file):
-            with open(review_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {}
+        return self._load_json('data/training/reviews/analyzed_reviews.json', 'review 模式')
 
     def _load_issue_knowledge(self) -> Dict:
         """加载 issue 知识库"""
-        issue_file = PROJECT_ROOT / 'data/training/issues/qa_knowledge_base.json'
-        if os.path.exists(issue_file):
-            with open(issue_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {}
+        return self._load_json('data/training/issues/qa_knowledge_base.json', 'issue 知识库')
 
     def identify_task_type(self, content: str, metadata: Dict = None) -> Dict:
         """
@@ -318,19 +383,40 @@ class SmartReviewer:
             else:
                 json_str = response
 
-            result = json.loads(json_str.strip())
+            result = validate_ai_result(json.loads(json_str.strip()))
             result['raw_response'] = response
             return result
 
+        except ValueError as e:
+            # json.JSONDecodeError 和格式校验失败都是 ValueError：明确报错，不当作"无问题"
+            return {
+                'error': f'AI 返回内容无法作为有效审查结果: {e}',
+                'raw_response': response if 'response' in locals() else None
+            }
         except Exception as e:
             return {
                 'error': str(e),
                 'raw_response': response if 'response' in locals() else None
             }
 
-    def review_with_rules(self, content: str, task_info: Dict, standards: Dict) -> Dict:
-        """使用规则引擎审查（当没有 AI 时）"""
+    def review_with_rules(self, content: str, task_info: Dict, standards: Dict, added: Optional[List[tuple]] = None) -> Dict:
+        """使用规则引擎审查（当没有 AI 时）
+
+        added: 仓库 diff 的新增行 [(文件, 行号, 文本)]。提供时规则只检查这些行，
+        避免把已删除的代码或未改动的上下文当成本次改动的问题；未提供时检查整段内容。
+        """
         issues = []
+        lines = added if added is not None else [(None, None, text) for text in content.splitlines()]
+
+        def first_match(pattern):
+            for path, line_no, text in lines:
+                if re.search(pattern, text):
+                    return path, line_no
+            return None
+
+        def location(hit):
+            path, line_no = hit
+            return f'{path}:{line_no}' if path and line_no else (path or '')
 
         # 规则 1: 检查常见错误模式
         error_patterns = [
@@ -341,11 +427,13 @@ class SmartReviewer:
         ]
 
         for pattern, issue_type, severity, suggestion in error_patterns:
-            if re.search(pattern, content):
+            hit = first_match(pattern)
+            if hit:
                 issues.append({
                     'type': issue_type,
                     'severity': severity,
                     'description': f'发现 {issue_type}',
+                    'location': location(hit),
                     'suggestion': suggestion
                 })
 
@@ -357,11 +445,13 @@ class SmartReviewer:
             ]
 
             for pattern, issue_type, severity, suggestion in npu_patterns:
-                if re.search(pattern, content):
+                hit = first_match(pattern)
+                if hit:
                     issues.append({
                         'type': issue_type,
                         'severity': severity,
                         'description': f'NPU 代码问题: {issue_type}',
+                        'location': location(hit),
                         'suggestion': suggestion
                     })
 
@@ -417,7 +507,19 @@ class SmartReviewer:
         else:
             if verbose:
                 print("   使用规则引擎...")
-            review_result = self.review_with_rules(content, task_info, standards)
+            repository = (metadata or {}).get('repository')
+            # 仓库审查只检查 diff 新增行；粘贴的代码片段没有 diff 标记，仍整段检查
+            added = added_lines(repository.get('diff', '')) if repository else None
+            review_result = self.review_with_rules(content, task_info, standards, added=added)
+        repository = (metadata or {}).get('repository')
+        if repository and isinstance(review_result, dict):
+            truncated = bool(repository.get('diff_truncated'))
+            review_result['coverage'] = 'partial' if truncated else 'full'
+            if truncated:
+                review_result['coverage_note'] = (
+                    f"diff 被截断，只审查了 {len(repository.get('diff', ''))} / "
+                    f"{repository.get('diff_total_chars', '?')} 字符；结果不代表整个改动。"
+                )
         if verbose:
             print()
 
@@ -428,7 +530,7 @@ class SmartReviewer:
             'review_result': review_result,
             'knowledge_retrieval': {
                 'method': 'local_bm25', 'indexed_records': len(self.knowledge_search.documents),
-                'references': references, 'warnings': self.knowledge_search.warnings,
+                'references': references, 'warnings': [*self.knowledge_search.warnings, *self.data_warnings],
             },
             'metadata': metadata or {}
         }
@@ -466,6 +568,11 @@ class SmartReviewer:
         if 'error' in result:
             print(f"[ERROR] 审查失败: {result['error']}")
             return
+
+        partial = result.get('coverage') == 'partial'
+        if partial:
+            print(f"[范围不完整] {result.get('coverage_note', 'diff 被截断，结果只覆盖部分改动。')}")
+            print()
 
         issues = result.get('issues', [])
         print(f"[ISSUES] 发现问题: {len(issues)} 个")
@@ -539,7 +646,8 @@ class SmartReviewer:
                 'comment': '[COMMENT]'
             }
             prefix = rec_prefix.get(recommendation, '[RESULT]')
-            print(f"{prefix} 审查结论: {recommendation.upper()}")
+            note = '（仅覆盖部分 diff，不能视为通过）' if partial and recommendation == 'approve' else ''
+            print(f"{prefix} 审查结论: {recommendation.upper()}{note}")
             print()
 
         print("=" * 80)

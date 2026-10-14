@@ -6,7 +6,7 @@
 
 const { spawn } = require('child_process');
 const path = require('path');
-const fs = require('fs');
+const { findPython } = require('./python-launcher');
 
 // 项目根目录
 const PROJECT_ROOT = path.join(__dirname, '..');
@@ -24,27 +24,6 @@ const LOGO = `
                                         /____/
 `;
 
-// 检查 Python
-function checkPython() {
-  return new Promise((resolve, reject) => {
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-
-    const check = spawn(pythonCmd, ['--version']);
-
-    check.on('close', (code) => {
-      if (code === 0) {
-        resolve(pythonCmd);
-      } else {
-        reject(new Error('Python 未安装或不在 PATH 中'));
-      }
-    });
-
-    check.on('error', () => {
-      reject(new Error('Python 未安装或不在 PATH 中'));
-    });
-  });
-}
-
 // 显示欢迎信息
 function showWelcome() {
   console.log(LOGO);
@@ -56,14 +35,14 @@ function showWelcome() {
 // 运行 Python 脚本
 async function runPython(args) {
   try {
-    const pythonCmd = await checkPython();
+    const python_ = findPython();
 
     // 显示 Logo
     // JSON and command output must stay machine readable. The Python CLI
     // owns the interactive UI so launchers do not print a second banner.
 
-    // 启动 Python 脚本
-    const python = spawn(pythonCmd, [PYTHON_SCRIPT, ...args], {
+    // 启动 Python 脚本（python_.args 保留 `py -3` 这类启动器参数）
+    const python = spawn(python_.command, [...python_.args, PYTHON_SCRIPT, ...args], {
       stdio: 'inherit',
       cwd: process.cwd()
     });

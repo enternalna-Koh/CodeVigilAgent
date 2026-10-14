@@ -76,6 +76,7 @@ def collect_repo_context(
         "changed_files": changed_files,
         "diff": diff,
         "diff_truncated": len(full_diff) > max_diff_chars,
+        "diff_total_chars": len(full_diff),
         "untracked_files": untracked,
     }
 
@@ -83,7 +84,16 @@ def collect_repo_context(
 def format_repo_prompt(context: Dict) -> str:
     """Turn repository context into a bounded prompt section."""
     files = "\n".join(f"- {name}" for name in context.get("changed_files", [])) or "(无工作区变更)"
+    scope = ""
+    if context.get("diff_truncated"):
+        scope = (
+            f"\n【审查范围警告】diff 已被截断：下面只包含完整 diff {context.get('diff_total_chars', '?')} 字符中的前 "
+            f"{len(context.get('diff', ''))} 字符，末尾可能在文件或代码行中间被切断，后面的改动没有提供给你。"
+            "只能对已提供部分下结论；不得把未提供的改动当作没有问题，"
+            "也不得因为已看到的部分没有问题就给出 approve。\n"
+        )
     return f"""Git PR diff 审查任务。只根据下面的 diff 指出可证实的问题；不要把状态列表当成代码内容。
+diff 中以 "-" 开头的行是已删除的代码，只有 "+" 开头的行才是改动后的代码；不要把删除行当作现有问题。{scope}
 仓库上下文:
 - 根目录: {context.get('root', '')}
 - 分支: {context.get('branch', '')}

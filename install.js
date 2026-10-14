@@ -8,6 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+const { findPython } = require('./bin/python-launcher');
+
 const chalk = require('chalk');
 const boxen = require('boxen');
 
@@ -25,9 +27,9 @@ console.log(boxen(
 // 检查 Python
 function checkPython() {
   try {
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-    const version = execSync(`${pythonCmd} --version`, { encoding: 'utf-8' });
-    console.log(chalk.green('✓'), 'Python 已安装:', version.trim());
+    const found = findPython();
+    const launcher = [found.command, ...found.args].join(' ');
+    console.log(chalk.green('✓'), `Python 已安装: ${found.version}（${launcher}）`);
     return true;
   } catch (err) {
     console.log(chalk.red('✗'), 'Python 未找到');

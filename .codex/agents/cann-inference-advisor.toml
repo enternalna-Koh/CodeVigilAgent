@@ -1,4 +1,7 @@
-name = "cann-inference-advisor"\ndescription = "CANN 推理部署与性能优化顾问。针对模型迁移、推理服务、性能调优场景提供检查与建议。 覆盖：PyTorch/ONNX 模型迁移、GE 离线推理、AscendCL API 使用、性能 profiling、 torch-npu 适配、精度对齐验证、服务化部署（FastAPI/gRPC）。"\ndeveloper_instructions = """\n你是 **CANN Inference Advisor**：专注于模型推理部署的审查与性能优化建议。默认只报告不改代码。
+name = "cann-inference-advisor"
+description = "CANN 推理部署与性能优化顾问。针对模型迁移、推理服务、性能调优场景提供检查与建议。 覆盖：PyTorch/ONNX 模型迁移、GE 离线推理、AscendCL API 使用、性能 profiling、 torch-npu 适配、精度对齐验证、服务化部署（FastAPI/gRPC）。"
+developer_instructions = '''
+你是 **CANN Inference Advisor**：专注于模型推理部署的审查与性能优化建议。默认只报告不改代码。
 
 ## 分流（先判再查）
 
@@ -212,4 +215,5 @@ Skill 根：`.cursor/skills/` → `.agents/skills/` → `~/.cursor/skills/`。�
 - 超时与限流机制
 - 健康检查端点
 - 容器镜像构建（CANN 依赖）
-```\n"""\n
+```
+'''

@@ -30,7 +30,11 @@ def review(args: argparse.Namespace) -> int:
         print("[INFO] 暂存区没有可审查的 diff。" if args.staged else "[INFO] 没有可审查的已跟踪文件 diff；未跟踪文件尚未纳入审查。")
         return 0
     if context["diff_truncated"]:
-        print("[WARN] diff 超出大小限制，当前结果仅覆盖前半部分。", file=sys.stderr)
+        if args.require_full:
+            print(f"[ERROR] diff 共 {context['diff_total_chars']} 字符，超出 --max-diff {args.max_diff}，"
+                  "无法完成完整审查；请调大 --max-diff 或分批提交。", file=sys.stderr)
+            return 1
+        print("[WARN] diff 超出大小限制，当前结果仅覆盖前半部分（报告中 coverage=partial）。", file=sys.stderr)
 
     reviewer = SmartReviewer(args.config, verbose=not args.json)
     if args.offline:
@@ -99,7 +103,7 @@ def chat(args: argparse.Namespace) -> int:
         print('已开启多行模式：回车换行，/send 发送，/cancel 取消。')
     if args.message:
         print(agent.answer(args.message))
-        return 0
+        return 0 if agent.last_ok else 1
     while True:
         try:
             text = read_message(multiline=args.multiline)
@@ -154,6 +158,8 @@ def main() -> int:
     review_parser.add_argument("--output", "-o")
     review_parser.add_argument("--json", action="store_true", help="输出 JSON")
     review_parser.add_argument("--max-diff", type=int, default=12000)
+    review_parser.add_argument("--require-full", action="store_true",
+                               help="diff 超出 --max-diff 时直接失败，不给出只覆盖部分改动的审查结果")
     review_parser.set_defaults(func=review)
 
     test_parser = subparsers.add_parser("test", help="运行项目测试")
