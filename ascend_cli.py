@@ -64,21 +64,24 @@ def review(args: argparse.Namespace) -> int:
 
     prompt = format_repo_prompt(context)
     paths = context.get("changed_files") or []
-    specialist = resolve_specialist(prompt, paths=paths, explicit=getattr(args, "scenario", None))
+    specialist = resolve_specialist(context["diff"], paths=paths, explicit=getattr(args, "scenario", None))
     require_scenario = bool(getattr(args, "require_scenario", False) or getattr(args, "scenario", None))
     # 显式 --scenario 或 --require-scenario：含糊/缺失则停；默认自动判定失败时退回通用审查
-    if specialist.status == "missing_agent" or (require_scenario and specialist.status == "needs_context"):
+    if specialist.status in ("missing_agent", "incomplete") or (require_scenario and specialist.status == "needs_context"):
         payload = {
             "needs_context": specialist.status == "needs_context",
             "specialist_context": specialist.as_dict(),
-            "question": specialist.question or "这是算子社区任务，还是推理部署？",
+            "question": specialist.question or specialist.reason,
         }
         if args.json:
             print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:
             print(f"[NEED CONTEXT] {payload['question']}")
             print(f"  reason: {specialist.reason}")
-            print("  使用 --scenario operator|inference 明确场景后重试。")
+            if specialist.status == "needs_context":
+                print("  使用 --scenario operator|inference 明确场景后重试。")
+            else:
+                print("  请恢复必要规则文件或调整专业上下文预算后重试。")
         if args.output:
             Path(args.output).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return 2
@@ -331,7 +334,7 @@ def _slash_cmd(text: str):
     return parts[0].lower(), (parts[1] if len(parts) > 1 else '')
 
 
-def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None) -> str:
+def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, config_file=None) -> str:
     """Dispatch in-chat slash commands.
 
     Returns: 'exit' | 'handled' | 'pass' (not a known slash cmd / not a slash).
@@ -424,10 +427,10 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None) -
 
     if cmd == '/model':
         ensure_home()
-        path = str(config_path())
+        path = str(config_file or config_path())
         data = read_config(path) or {}
         env = load_config_from_env()
-        merged = merge_config(data, env)
+        merged = agent.model_config or merge_config(data, env)
         if not arg.strip():
             print(ok('当前模型'))
             print(mute(f"  provider: {merged.get('provider')}"))
@@ -473,21 +476,15 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None) -
         elif not target.get('file_provider'):
             # custom model id on current gateway
             print(mute(target['message']))
-            data = apply_target_to_config(data, target)
-            write_config(data, path)
-            try:
-                if reload_client:
-                    reload_client()
-                print(ok(f"已切换 model={data['model']}（仍用当前 API）"))
-            except Exception as exc:
-                print(warn(f'已写入配置，但重载失败: {exc}'))
-            return 'handled'
 
-        data = apply_target_to_config(data, target, api_key=new_key)
+        data = apply_target_to_config(merged, target, api_key=new_key)
         write_config(data, path)
         try:
             if reload_client:
-                reload_client()
+                reload_client(data)
+            else:
+                agent.client = get_ai_client(path, overrides=data)
+            agent.model_config = data
             print(ok(
                 f"已切换 provider={data.get('provider')} model={data.get('model')}"
                 + (f" base_url={data.get('base_url')}" if data.get('base_url') else '')
@@ -558,9 +555,9 @@ def chat(args: argparse.Namespace) -> int:
         progress=_on_progress,
     )
 
-    def _reload_client():
+    def _reload_client(overrides=None):
         nonlocal client, agent
-        client = get_ai_client(_default_config(args.config))
+        client = get_ai_client(_default_config(args.config), overrides=overrides)
         agent.client = client
 
     if not args.message:
@@ -600,7 +597,8 @@ def chat(args: argparse.Namespace) -> int:
             return 0
         if not text:
             continue
-        action = handle_chat_slash(text, agent, reload_client=_reload_client)
+        action = handle_chat_slash(text, agent, reload_client=_reload_client,
+                                  config_file=_default_config(args.config))
         if action == 'exit':
             return 0
         if action == 'handled':

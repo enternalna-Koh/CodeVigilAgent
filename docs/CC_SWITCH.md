@@ -19,6 +19,9 @@ reviewagent                 # 唤醒 AI Infra Agent（对话）
 
 ReviewAgent 读取（**环境变量覆盖** `~/.reviewagent/ai_config.json`）：
 
+对话中显式执行 `/model` 后，该选择在当前会话中优先于环境变量，并保存到当前配置文件
+（含 `--config` 指定路径）。重启进程后仍按环境变量优先；cc-switch 注入的旧值需由对应工具更新。
+
 | 变量 | 作用 |
 |------|------|
 | `OPENAI_API_KEY` | OpenAI 兼容密钥 |

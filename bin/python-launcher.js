@@ -38,12 +38,15 @@ function probe(candidate) {
 function findPython(platform = process.platform, probeFn = probe) {
   for (const candidate of candidates(platform)) {
     const version = probeFn(candidate);
-    if (version) return { ...candidate, version };
+    const match = version && /Python\s+(\d+)\.(\d+)/i.exec(version);
+    if (match && Number(match[1]) === 3 && Number(match[2]) >= 7) {
+      return { ...candidate, version };
+    }
   }
   const tried = candidates(platform)
     .map((c) => [c.command, ...c.args].join(' '))
     .join('、');
-  throw new Error(`Python 未安装或不在 PATH 中（已尝试: ${tried}）`);
+  throw new Error(`未找到 Python 3.7+（已尝试: ${tried}）`);
 }
 
 module.exports = { findPython, probe };
