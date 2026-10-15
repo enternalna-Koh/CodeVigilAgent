@@ -2,6 +2,21 @@
 
 ---
 
+## v3.2 - 可靠性回归落地 + 专业 Agent CLI (2026-10-15)
+
+### 同步自远程 `5a82576`
+- Windows Python 启动器共用、`added_lines` 规则、AI JSON 校验、截断 coverage、chat 失败退出码
+- 实测报告与协作任务单
+
+### 本机续优化
+- Python 3.10：`scripts/toml_compat.py` 替代硬依赖 `tomllib`
+- F8 最小实现：`--scenario` / `--require-scenario` + `specialist_context`
+- 推理 Agent 精度/性能语义去绝对阈值
+- `package.json` license 与 Apache-2.0 LICENSE 对齐
+- 回归：48 tests OK
+
+---
+
 ## v3.1 - 双智能体路由与 CLI 合入 (2026-10-14)
 
 ### 智能体

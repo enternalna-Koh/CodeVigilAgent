@@ -306,14 +306,25 @@ class SmartReviewer:
 
         return standards
 
-    def review_with_ai(self, content: str, task_info: Dict, standards: Dict, references=None) -> Dict:
+    def review_with_ai(self, content: str, task_info: Dict, standards: Dict, references=None,
+                       specialist_text: str = '') -> Dict:
         """使用 AI 进行审查"""
         if not self.has_ai:
             return {'error': 'AI not configured'}
 
+        specialist_block = ''
+        if specialist_text:
+            specialist_block = f"""
+【专业审查规则 — 必须优先遵守】
+严重级别映射：BLOCKER/CRITICAL→critical，WARN→medium，NOTE→low。
+输出仍须符合下方 JSON 契约（issues/severity/recommendation）。
+
+{specialist_text}
+"""
+
         # 构建系统提示
         system_prompt = f"""你是一个专业的代码审查专家，专注于昇腾 NPU 相关代码。
-
+{specialist_block}
 当前任务类型: {task_info['type']}
 子类型: {', '.join(task_info['subtypes'])}
 
@@ -461,13 +472,16 @@ class SmartReviewer:
             'note': '使用规则引擎审查（配置 AI 可获得更智能的审查）'
         }
 
-    def review(self, content: str, metadata: Dict = None, verbose: bool = True) -> Dict:
+    def review(self, content: str, metadata: Dict = None, verbose: bool = True,
+               specialist_text: str = '', specialist_meta: Dict = None) -> Dict:
         """
         智能审查主入口
 
         Args:
             content: 要审查的内容（代码/PR描述/Issue内容）
             metadata: 额外的元数据（可选）
+            specialist_text: 专业 Agent/Skill 正文（可选）
+            specialist_meta: 专业上下文加载记录（可选）
 
         Returns:
             完整的审查报告
@@ -493,6 +507,8 @@ class SmartReviewer:
         if verbose:
             print(f"   标准: {standards['name']}")
             print(f"   检查项: {len(standards['checklist'])} 项")
+            if specialist_meta and specialist_meta.get('scenario'):
+                print(f"   专业场景: {specialist_meta.get('scenario')} ({specialist_meta.get('status')})")
             print()
 
         # Step 3: 执行审查
@@ -503,7 +519,8 @@ class SmartReviewer:
         if self.has_ai:
             if verbose:
                 print("   使用 AI 引擎...")
-            review_result = self.review_with_ai(content, task_info, standards, references)
+            review_result = self.review_with_ai(
+                content, task_info, standards, references, specialist_text=specialist_text or '')
         else:
             if verbose:
                 print("   使用规则引擎...")
@@ -511,6 +528,11 @@ class SmartReviewer:
             # 仓库审查只检查 diff 新增行；粘贴的代码片段没有 diff 标记，仍整段检查
             added = added_lines(repository.get('diff', '')) if repository else None
             review_result = self.review_with_rules(content, task_info, standards, added=added)
+            if specialist_text and isinstance(review_result, dict):
+                review_result['note'] = (
+                    (review_result.get('note') or '') +
+                    '；已记录专业规则来源，离线模式未由模型执行专业 Agent 正文'
+                ).strip('；')
         repository = (metadata or {}).get('repository')
         if repository and isinstance(review_result, dict):
             truncated = bool(repository.get('diff_truncated'))
@@ -532,6 +554,7 @@ class SmartReviewer:
                 'method': 'local_bm25', 'indexed_records': len(self.knowledge_search.documents),
                 'references': references, 'warnings': [*self.knowledge_search.warnings, *self.data_warnings],
             },
+            'specialist_context': specialist_meta or {'status': 'none'},
             'metadata': metadata or {}
         }
 
@@ -550,6 +573,18 @@ class SmartReviewer:
             print(f"[参考案例] {reference['title']}\n   {reference['url']}")
         for warning in retrieval.get('warnings', []):
             print(f"[知识库提示] {warning}")
+        specialist = report.get('specialist_context') or {}
+        if specialist.get('status') and specialist.get('status') != 'none':
+            print(f"[专业上下文] scenario={specialist.get('scenario')} status={specialist.get('status')}")
+            if specialist.get('reason'):
+                print(f"   原因: {specialist['reason']}")
+            for item in specialist.get('files') or []:
+                print(f"   - {item.get('status')}: {item.get('path')}")
+            if specialist.get('omitted'):
+                print(f"   省略: {', '.join(specialist['omitted'])}")
+            if not self.has_ai and specialist.get('text_loaded'):
+                print('   离线模式：仅本地规则，不代表模型已执行专业检查')
+            print()
         task = report['task_identification']
         print(f"[TYPE] 任务类型: {task['type']}")
         print(f"   子类型: {', '.join(task['subtypes'])}")

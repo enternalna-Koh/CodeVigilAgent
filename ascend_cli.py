@@ -17,6 +17,7 @@ from scripts.knowledge_search import KnowledgeSearch, PROJECT_ROOT
 from scripts.ai_adapter import get_ai_client
 from scripts.conversation_agent import ConversationAgent
 from scripts.chat_input import read_message
+from scripts.specialist_context import resolve_specialist
 
 
 def review(args: argparse.Namespace) -> int:
@@ -36,13 +37,49 @@ def review(args: argparse.Namespace) -> int:
             return 1
         print("[WARN] diff 超出大小限制，当前结果仅覆盖前半部分（报告中 coverage=partial）。", file=sys.stderr)
 
+    prompt = format_repo_prompt(context)
+    paths = context.get("changed_files") or []
+    specialist = resolve_specialist(prompt, paths=paths, explicit=getattr(args, "scenario", None))
+    require_scenario = bool(getattr(args, "require_scenario", False) or getattr(args, "scenario", None))
+    # 显式 --scenario 或 --require-scenario：含糊/缺失则停；默认自动判定失败时退回通用审查
+    if specialist.status == "missing_agent" or (require_scenario and specialist.status == "needs_context"):
+        payload = {
+            "needs_context": specialist.status == "needs_context",
+            "specialist_context": specialist.as_dict(),
+            "question": specialist.question or "这是算子社区任务，还是推理部署？",
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(f"[NEED CONTEXT] {payload['question']}")
+            print(f"  reason: {specialist.reason}")
+            print("  使用 --scenario operator|inference 明确场景后重试。")
+        if args.output:
+            Path(args.output).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return 2
+
+    if specialist.status == "ready":
+        meta = specialist.as_dict()
+        meta["text_loaded"] = bool(specialist.text)
+        specialist_text = specialist.text
+    else:
+        meta = specialist.as_dict()
+        meta["status"] = "skipped"
+        meta["text_loaded"] = False
+        specialist_text = ""
+        if not args.json:
+            print(f"[INFO] 未加载专业 Agent（{specialist.reason or specialist.status}）；使用通用审查。"
+                  "需要时可加 --scenario operator|inference。", file=sys.stderr)
+
     reviewer = SmartReviewer(args.config, verbose=not args.json)
     if args.offline:
         reviewer.has_ai = False
     report = reviewer.review(
-        format_repo_prompt(context),
+        prompt,
         metadata={"source": "repository", "repository": context},
         verbose=not args.json,
+        specialist_text=specialist_text,
+        specialist_meta=meta,
     )
     result = report.get("review_result", {})
     if args.output:
@@ -160,6 +197,10 @@ def main() -> int:
     review_parser.add_argument("--max-diff", type=int, default=12000)
     review_parser.add_argument("--require-full", action="store_true",
                                help="diff 超出 --max-diff 时直接失败，不给出只覆盖部分改动的审查结果")
+    review_parser.add_argument("--scenario", choices=["operator", "inference"],
+                               help="加载专业 Agent：operator=算子社区任务，inference=推理部署；省略则自动判定，含糊时退回通用审查")
+    review_parser.add_argument("--require-scenario", action="store_true",
+                               help="自动判定含糊时返回 needs_context（退出码 2），不进行通用审查")
     review_parser.set_defaults(func=review)
 
     test_parser = subparsers.add_parser("test", help="运行项目测试")

@@ -1,11 +1,11 @@
-# ReviewAgent - 智能代码审查助手
+﻿# ReviewAgent - 智能代码审查助手
 
 专为昇腾 NPU 生态打造的 AI 代码审查系统（Cursor/Codex Subagent + 本地 CLI）。
 
 仓库：[`enternalna-Koh/ReviewAgent`](https://github.com/enternalna-Koh/ReviewAgent)（别名 `Agent`）。
 
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ### Cursor 智能体
 

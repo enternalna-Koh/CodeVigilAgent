@@ -8,7 +8,6 @@ import os
 import shutil
 import subprocess
 import tempfile
-import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -18,6 +17,8 @@ from scripts.conversation_agent import ConversationAgent
 from scripts.knowledge_search import KnowledgeSearch, PROJECT_ROOT
 from scripts.repo_context import format_repo_prompt
 from scripts.smart_reviewer import SmartReviewer, added_lines, validate_ai_result
+from scripts import toml_compat as tomllib
+from scripts.specialist_context import detect_scenario, load_specialist_context
 
 DELETED_CUDA = """diff --git a/m.py b/m.py
 --- a/m.py
@@ -167,7 +168,7 @@ class temp_repo(contextlib.ContextDecorator):
 
 def run_cli_review(root, **overrides):
     params = dict(staged=False, config='unused.json', offline=False, output=None, json=True,
-                  max_diff=12000, require_full=False)
+                  max_diff=12000, require_full=False, scenario=None, require_scenario=False)
     params.update(overrides)
     args = argparse.Namespace(**params)
     cwd, out, err = os.getcwd(), io.StringIO(), io.StringIO()
@@ -302,6 +303,54 @@ class ConfigFileTests(unittest.TestCase):
                 self.assertEqual(data['name'], path.stem)
                 self.assertTrue(data['description'])
                 self.assertIn('##', data['developer_instructions'])
+
+
+class SpecialistRoutingTests(unittest.TestCase):
+    def test_explicit_and_auto_and_ambiguous(self):
+        op = detect_scenario('__simt_vf__ tiling', paths=['sparse/op_kernel/x.cpp'])
+        self.assertEqual((op.scenario, op.status), ('operator', 'ready'))
+        inf = detect_scenario('import torch_npu\nx = t.npu()', paths=['serve/infer.py'])
+        self.assertEqual((inf.scenario, inf.status), ('inference', 'ready'))
+        mixed = detect_scenario('__gm__ and torch_npu', paths=['op_kernel/a.cpp', 'vllm/x.py'])
+        self.assertEqual(mixed.status, 'needs_context')
+        none = detect_scenario('hello world', paths=['readme.md'])
+        self.assertEqual(none.status, 'needs_context')
+        explicit = detect_scenario('hello', paths=[], explicit='operator')
+        self.assertEqual(explicit.scenario, 'operator')
+
+    def test_load_operator_context_includes_agent(self):
+        loaded = load_specialist_context('operator')
+        self.assertEqual(loaded.status, 'ready')
+        self.assertIn('CANN AscendC Operator Checker', loaded.text)
+        self.assertTrue(any(f.get('role') == 'agent' for f in loaded.files))
+
+    def test_cli_needs_context_exit_code(self):
+        with temp_repo(DELETED_CUDA) as root, \
+                patch('scripts.smart_reviewer.get_ai_client', side_effect=ValueError('no ai')):
+            (root / 'm.py').write_text('x = 1\n', encoding='utf-8')
+            code, out, _ = run_cli_review(root, offline=True, scenario=None, require_scenario=True)
+        self.assertEqual(code, 2)
+        payload = json.loads(out)
+        self.assertTrue(payload.get('needs_context'))
+
+    def test_cli_ambiguous_defaults_to_general_review(self):
+        with temp_repo(DELETED_CUDA) as root, \
+                patch('scripts.smart_reviewer.get_ai_client', side_effect=ValueError('no ai')):
+            (root / 'm.py').write_text('x = 1\n', encoding='utf-8')
+            code, out, _ = run_cli_review(root, offline=True, scenario=None)
+        self.assertEqual(code, 0)
+        report = json.loads(out)
+        self.assertEqual(report['specialist_context']['status'], 'skipped')
+
+    def test_cli_explicit_scenario_offline_includes_specialist_meta(self):
+        with temp_repo(DELETED_CUDA) as root, \
+                patch('scripts.smart_reviewer.get_ai_client', side_effect=ValueError('no ai')):
+            code, out, _ = run_cli_review(root, offline=True, scenario='operator')
+        self.assertEqual(code, 0)
+        report = json.loads(out)
+        self.assertEqual(report['specialist_context']['scenario'], 'operator')
+        self.assertEqual(report['specialist_context']['status'], 'ready')
+        self.assertTrue(report['specialist_context']['text_loaded'])
 
 
 if __name__ == '__main__':

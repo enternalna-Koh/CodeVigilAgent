@@ -41,13 +41,17 @@ def main() -> int:
     parent = ref["object"]["sha"]
     print("parent", parent, flush=True)
 
-    lines = run(["git", "ls-tree", "-r", "HEAD"]).splitlines()
+    # -z avoids Windows C-quoted octal paths for non-ASCII filenames
+    raw = subprocess.check_output(["git", "ls-tree", "-r", "-z", "HEAD"])
     entries = []
-    for line in lines:
-        meta, path = line.split("\t", 1)
-        mode, typ, _sha = meta.split()
+    for entry in raw.split(b"\0"):
+        if not entry:
+            continue
+        meta, path_b = entry.split(b"\t", 1)
+        mode, typ, _sha = meta.decode("utf-8", "replace").split()
         if typ != "blob":
             continue
+        path = path_b.decode("utf-8")
         entries.append((path, mode))
     print(f"blobs to upload: {len(entries)}", flush=True)
 
