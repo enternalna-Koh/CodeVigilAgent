@@ -13,12 +13,17 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-# Windows 编码
-if sys.platform == 'win32':
-    import io
-    if not isinstance(sys.stdout, io.TextIOWrapper) or sys.stdout.encoding.lower() != 'utf-8':
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', line_buffering=True)
+# Windows 编码 + ANSI 颜色
+try:
+    from scripts.term_style import enable_windows_ansi, ensure_utf8_stdio
+    ensure_utf8_stdio()
+    enable_windows_ansi()
+except Exception:
+    if sys.platform == 'win32':
+        import io
+        if not isinstance(sys.stdout, io.TextIOWrapper) or (sys.stdout.encoding or '').lower() != 'utf-8':
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', line_buffering=True)
 
 
 ASCII_LOGO = r"""

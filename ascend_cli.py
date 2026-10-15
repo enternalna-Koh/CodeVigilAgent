@@ -19,8 +19,24 @@ from scripts.knowledge_search import KnowledgeSearch, PROJECT_ROOT
 from scripts.ai_adapter import get_ai_client, load_config_from_env, load_config_from_file, merge_config
 from scripts.conversation_agent import ConversationAgent
 from scripts.chat_input import read_message
+from scripts.term_style import (
+    brand,
+    enable_windows_ansi,
+    ensure_utf8_stdio,
+    mute,
+    ok,
+    warn,
+)
+from scripts.think_ui import begin_think, end_think, think_progress
+from scripts.md_term import print_markdown_box
 from scripts.specialist_context import resolve_specialist
 from scripts.agent_home import ensure_home, resolve_config_file, config_path, home_dir, write_config, read_config
+from scripts.model_catalog import (
+    apply_target_to_config,
+    format_catalog_help,
+    gateway_changed,
+    resolve_model_request,
+)
 
 
 def _default_config(cli_value: str = None) -> str:
@@ -164,17 +180,102 @@ def doctor(args: argparse.Namespace) -> int:
         return 1
 
 
+def _interactive_setup() -> int:
+    """Fallback wizard (prefer Node `reviewagent` / `config --wizard` TUI)."""
+    ensure_home()
+    path = config_path()
+    data = read_config(str(path)) or {}
+    print('ReviewAgent 首次配置（建议直接运行 `reviewagent`，会使用更美观的引导界面）')
+    print(f'配置文件: {path}')
+    print()
+    providers = [
+        ('deepseek', 'DeepSeek', [
+            'deepseek-chat', 'deepseek-reasoner', 'deepseek-coder',
+            'deepseek-v3', 'deepseek-r1', 'deepseek-r1-0528',
+        ]),
+        ('openai', 'OpenAI / 兼容网关', [
+            'gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini',
+            'o1', 'o3-mini', 'o4-mini', 'gpt-3.5-turbo',
+        ]),
+        ('claude', 'Claude', [
+            'claude-opus-4-20250514', 'claude-sonnet-4-20250514',
+            'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022',
+        ]),
+        ('glm', '智谱 GLM', [
+            'glm-4', 'glm-4-plus', 'glm-4-air', 'glm-4-flash', 'glm-3-turbo',
+        ]),
+    ]
+    print('选择 provider:')
+    for i, (_pid, label, _models) in enumerate(providers, 1):
+        print(f'  {i}. {label}')
+    try:
+        choice = input('编号 [1]: ').strip() or '1'
+        idx = int(choice) - 1
+        provider, _label, model_list = providers[idx] if 0 <= idx < len(providers) else providers[0]
+    except (ValueError, EOFError, KeyboardInterrupt):
+        print('\n[INFO] 已取消')
+        return 1
+
+    defaults = {
+        'deepseek': ('deepseek-chat', ''),
+        'openai': ('gpt-4o', 'https://api.openai.com/v1'),
+        'claude': ('claude-3-5-sonnet-20241022', ''),
+        'glm': ('glm-4', ''),
+    }
+    default_model, default_base = defaults.get(provider, ('deepseek-chat', ''))
+    print('选择模型:')
+    for i, name in enumerate(model_list, 1):
+        mark = ' (默认)' if name == default_model else ''
+        print(f'  {i}. {name}{mark}')
+    print(f'  {len(model_list) + 1}. 自定义输入')
+    try:
+        mchoice = input(f'编号 [1]: ').strip() or '1'
+        mi = int(mchoice) - 1
+        if 0 <= mi < len(model_list):
+            model = model_list[mi]
+        else:
+            model = input(f'自定义模型 ID [{default_model}]: ').strip() or default_model
+        base_url = ''
+        if provider == 'openai':
+            base_url = input(f'base_url（OpenAI 兼容网关）[{default_base}]: ').strip() or default_base
+        api_key = input('API Key（输入时可见，勿发给别人）: ').strip()
+    except (EOFError, KeyboardInterrupt):
+        print('\n[INFO] 已取消')
+        return 1
+
+    if not api_key or api_key == 'YOUR_API_KEY_HERE':
+        print('[ERROR] 未填写有效 API Key')
+        return 1
+
+    data['provider'] = provider
+    data['model'] = model
+    data['api_key'] = api_key
+    if base_url:
+        data['base_url'] = base_url
+    elif 'base_url' in data and provider != 'openai':
+        data['base_url'] = ''
+    written = write_config(data, str(path))
+    print(f'[OK] 已保存 {written}')
+    print('再运行: reviewagent')
+    return 0
+
+
 def config_cmd(args: argparse.Namespace) -> int:
     """Init / show / set provider config under ~/.reviewagent."""
     ensure_home()
     path = Path(resolve_config_file(args.config if getattr(args, 'config', None) else None))
+    if getattr(args, 'wizard', False):
+        return _interactive_setup()
     if args.init:
         ensure_home()
         print(f'[OK] home ready: {home_dir()}')
         print(f'[OK] config: {config_path()}')
-        print('编辑 api_key / provider / model，或用 cc-switch 注入 OPENAI_* 环境变量。')
+        print('下一步任选其一:')
+        print('  1) reviewagent config --wizard')
+        print('  2) reviewagent config --set api_key=sk-xxx provider=deepseek')
+        print('  3) 用 cc-switch 导出 OPENAI_API_KEY 后再运行 reviewagent')
         return 0
-    if args.show or (not args.set and not args.init):
+    if args.show or (not args.set and not args.init and not getattr(args, 'wizard', False)):
         data = read_config(str(path))
         safe = {**data, 'api_key': ('***' if data.get('api_key') and data.get('api_key') != 'YOUR_API_KEY_HERE' else data.get('api_key'))}
         print(json.dumps(safe, ensure_ascii=False, indent=2))
@@ -221,70 +322,306 @@ def model_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def _slash_cmd(text: str):
+    """Split leading slash command. '/model x' → ('/model', 'x'); 'hello' → (None, 'hello')."""
+    raw = (text or '').strip()
+    if not raw.startswith('/'):
+        return None, raw
+    parts = raw.split(maxsplit=1)
+    return parts[0].lower(), (parts[1] if len(parts) > 1 else '')
+
+
+def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None) -> str:
+    """Dispatch in-chat slash commands.
+
+    Returns: 'exit' | 'handled' | 'pass' (not a known slash cmd / not a slash).
+    Uses exact command tokens so /model is never eaten by /mode.
+    """
+    head = (text or '').strip().splitlines()[0].strip().lower() if text else ''
+    if head in ('exit', 'quit', 'q'):
+        print(ok('已退出对话。'))
+        return 'exit'
+
+    cmd, arg = _slash_cmd(text)
+    if cmd is None:
+        return 'pass'
+
+    if cmd in ('/exit', '/quit', '/q'):
+        print(ok('已退出对话。'))
+        return 'exit'
+
+    if cmd in ('/chat', '/daily'):
+        print(ok(agent.set_chat_mode('chat')))
+        return 'handled'
+
+    if cmd in ('/work', '/infra', '/review-mode'):
+        print(ok(agent.set_chat_mode('work')))
+        return 'handled'
+
+    if cmd == '/mode':
+        if not arg:
+            labels = {'auto': '自动分流', 'chat': '日常对话', 'work': '正式工作'}
+            print(ok(f'当前对话模式: {labels.get(agent.chat_mode, agent.chat_mode)}'))
+            print(mute('  /chat 日常  ·  /work 正式审查  ·  /mode auto'))
+        else:
+            print(ok(agent.set_chat_mode(arg.strip())))
+        return 'handled'
+
+    if cmd == '/network':
+        parts = arg.split()
+        if len(parts) == 1 and parts[0] in ('auto', 'on', 'off'):
+            agent.network = parts[0]
+        print(ok(f'联网模式: {agent.network}') + mute('  用法: /network auto|on|off'))
+        return 'handled'
+
+    if cmd == '/sources':
+        print(json.dumps(agent.last_tools, ensure_ascii=False, indent=2))
+        return 'handled'
+
+    if cmd == '/clear':
+        agent.clear()
+        print(ok('已清除当前对话和 PR/Issue 上下文。'))
+        return 'handled'
+
+    if cmd == '/context':
+        if not agent.context_summary:
+            print(warn('当前没有获取到的 PR/Issue。'))
+        for context in agent.context_summary:
+            print(brand(f"[{context['type']}] ") + context['title'])
+            print(mute(context['url']))
+            for warning in context['warnings']:
+                print(warn(f'[范围限制] {warning}'))
+        return 'handled'
+
+    if cmd == '/fix':
+        explicit = None
+        first = arg.split()[0] if arg.split() else ''
+        if first in ('operator', 'inference', 'general'):
+            explicit = None if first == 'general' else first
+        begin_think('生成补丁预览')
+        try:
+            reply = agent.propose_fix(explicit_scenario=explicit)
+        finally:
+            end_think('预览就绪')
+        _print_agent_reply(reply)
+        if agent.pending_fix and agent.pending_fix.files:
+            try:
+                confirm = input(warn('确认写入本地？输入 y 立即 /apply，其它键仅保留预览: ')).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = ''
+                print()
+            if confirm in ('y', 'yes', '是'):
+                _print_agent_reply(agent.apply_pending_fix(confirm=True))
+        return 'handled'
+
+    if cmd in ('/apply', '/fix-apply'):
+        _print_agent_reply(agent.apply_pending_fix(confirm=True))
+        return 'handled'
+
+    if cmd in ('/discard', '/fix-discard'):
+        _print_agent_reply(agent.discard_fix())
+        return 'handled'
+
+    if cmd == '/model':
+        ensure_home()
+        path = str(config_path())
+        data = read_config(path) or {}
+        env = load_config_from_env()
+        merged = merge_config(data, env)
+        if not arg.strip():
+            print(ok('当前模型'))
+            print(mute(f"  provider: {merged.get('provider')}"))
+            print(mute(f"  model:    {merged.get('model')}"))
+            print(mute(f"  base_url: {merged.get('base_url') or '(default)'}"))
+            key = merged.get('api_key') or ''
+            print(mute(f"  api_key:  {'已配置 (' + key[:4] + '…)' if key else '未配置'}"))
+            print(mute(f"  配置文件: {path}"))
+            print(brand('换厂商/模型（会要求对应 API Key）:'))
+            print(mute('  /model glm          → 智谱，默认 glm-4-flash'))
+            print(mute('  /model glm-4-flash'))
+            print(mute('  /model deepseek'))
+            print(mute('  /model MiniMax-M1   → 同厂商只改模型名'))
+            print(mute('  完整重配: reviewagent config --wizard'))
+            print(mute(format_catalog_help()))
+            return 'handled'
+
+        target = resolve_model_request(arg.strip())
+        if not target.get('ok'):
+            print(warn(target.get('message') or '无法解析'))
+            return 'handled'
+
+        print(ok(target['message']))
+        need_key = gateway_changed(merged, target)
+        new_key = None
+
+        if need_key:
+            label = target.get('label') or target.get('file_provider') or '新厂商'
+            print(warn(
+                f'将从 {merged.get("provider")} / {merged.get("base_url") or "(default)"} '
+                f'切换到 {label}（provider={target.get("file_provider")}）'
+            ))
+            print(mute('旧 API Key 不能通用，请填写新厂商的 Key；直接回车=取消本次切换'))
+            try:
+                new_key = input(f'{label} API Key › ').strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                print(warn('已取消，配置未改动'))
+                return 'handled'
+            if not new_key or new_key == 'YOUR_API_KEY_HERE':
+                print(warn('未填写 API Key，已取消切换（避免只改模型名却连错网关）'))
+                return 'handled'
+        elif not target.get('file_provider'):
+            # custom model id on current gateway
+            print(mute(target['message']))
+            data = apply_target_to_config(data, target)
+            write_config(data, path)
+            try:
+                if reload_client:
+                    reload_client()
+                print(ok(f"已切换 model={data['model']}（仍用当前 API）"))
+            except Exception as exc:
+                print(warn(f'已写入配置，但重载失败: {exc}'))
+            return 'handled'
+
+        data = apply_target_to_config(data, target, api_key=new_key)
+        write_config(data, path)
+        try:
+            if reload_client:
+                reload_client()
+            print(ok(
+                f"已切换 provider={data.get('provider')} model={data.get('model')}"
+                + (f" base_url={data.get('base_url')}" if data.get('base_url') else '')
+                + ('，API Key 已更新' if new_key else '，立即生效')
+            ))
+        except Exception as exc:
+            print(warn(f'已写入配置，但重载客户端失败: {exc}'))
+            print(mute('可检查 Key/网络后重开对话，或 reviewagent config --wizard'))
+        return 'handled'
+
+    if cmd == '/help':
+        print(brand('审核 / 质检怎么用'))
+        print(ok('0) 自动分流（默认，一般不用手切）'))
+        print(mute('   贴链接/社区任务正文 → 正式审查'))
+        print(mute('   好的/嗯/闲聊/无关问题 → 日常对话'))
+        print(mute('   「怎么改/下一步」→ 继续正式（沿用上下文）'))
+        print(mute('   可选钉住: /chat /work · 恢复自动: /mode auto · /clear 清空'))
+        print(ok('1) 贴链接'))
+        print(mute('   https://gitcode.com/Ascend/pytorch/issues/3135'))
+        print(ok('2) 多行输入'))
+        print(mute('   Win: 粘贴多行后 Enter 发送；Shift+Enter 换行'))
+        print(mute('   或 /paste → 粘贴 → /send'))
+        print(mute('   一次最多 20 个链接（REVIEWAGENT_MAX_URLS 可调）'))
+        print(ok('3) 换模型'))
+        print(mute('   /model  ·  /model MiniMax-M1  ·  reviewagent config --wizard'))
+        print(ok('4) 改补丁'))
+        print(mute('   /fix → y 或 /apply（不自动 push）'))
+        print(mute('退出: exit / /exit / Ctrl+C'))
+        print(mute('/discard /context /sources /clear · /network auto|on|off'))
+        return 'handled'
+
+    if cmd in ('/paste', '/p', '/send', '/cancel'):
+        print(warn('请在输入框使用该命令：/paste 进入多行，结束后 /send（或 /cancel）。'))
+        return 'handled'
+
+    # Unknown slash — still "handled" so we don't send "/foo" to the model as a review
+    print(warn(f'未知命令: {cmd}') + mute('  输入 /help 查看可用命令'))
+    return 'handled'
+
+
 def chat(args: argparse.Namespace) -> int:
+    ensure_utf8_stdio()
+    enable_windows_ansi()
     try:
         client = get_ai_client(_default_config(args.config))
     except Exception as exc:
         print(f"[ERROR] AI 未配置: {exc}")
-        print("[INFO] 运行 `reviewagent config` 或设置 OPENAI_API_KEY / AI_API_KEY（兼容 cc-switch）。")
-        return 1
+        if args.message:
+            print("[INFO] 非交互模式：请先 `reviewagent config --wizard` 或设置 OPENAI_API_KEY。")
+            return 1
+        print("[INFO] 进入配置向导（也可 Ctrl+C 退出后自行设置环境变量 / cc-switch）…\n")
+        if _interactive_setup() != 0:
+            return 1
+        try:
+            client = get_ai_client(_default_config(args.config))
+        except Exception as exc2:
+            print(f"[ERROR] 配置后仍无法启动: {exc2}")
+            return 1
+
+    quiet = os.environ.get('REVIEWAGENT_NODE_UI') == '1'
+
+    def _on_progress(message: str) -> None:
+        think_progress(message)
+
+    agent = ConversationAgent(
+        client,
+        network=args.network,
+        progress=_on_progress,
+    )
+
+    def _reload_client():
+        nonlocal client, agent
+        client = get_ai_client(_default_config(args.config))
+        agent.client = client
 
     if not args.message:
-        print('ReviewAgent · Ascend AI Infra')
-        print(f'config: {_default_config(args.config)}')
-        print('输入 PR/Issue URL 或问题；/help 查看命令；/exit 退出。')
-        print()
-
-    agent = ConversationAgent(client, network=args.network,
-                              progress=lambda message: print(f"[Agent] {message}"))
-    print("ReviewAgent 对话模式。发送 GitHub PR/Issue 链接即可分析，之后可直接追问。")
-    print("命令: /paste 多行输入，/context 当前分析对象，/help /clear /exit")
-    print(f'联网模式: {agent.network}；/network auto|on|off 切换（off 关闭外部资料获取，AI 仍使用配置的服务）')
+        if quiet:
+            print(mute('  默认自动切换：贴任务/链接→正式 · 好的/闲聊→日常 · 怎么改→继续正式'))
+            print(mute('  粘贴多行后 Enter 发送 · 可选钉住: /chat /work · /mode auto'))
+            print(mute('  Win: Shift+Enter换行 · exit/Ctrl+C · /model · /paste'))
+            print(mute('  命令: /help /mode /model /fix /apply /clear'))
+        else:
+            print(brand('ReviewAgent · Ascend AI Infra'))
+            print(mute(f'config: {_default_config(args.config)}'))
+            print(mute('多行可直接粘贴；换模型: /model MiniMax-M1'))
+            print()
     if args.multiline:
-        print('已开启多行模式：回车换行，/send 发送，/cancel 取消。')
+        print(warn('已开启多行模式：回车换行，/send 发送，/cancel 取消。'))
     if args.message:
-        print(agent.answer(args.message))
+        begin_think('思考中')
+        try:
+            reply = agent.answer(args.message)
+        finally:
+            end_think('回答就绪')
+        _print_agent_reply(reply)
         return 0 if agent.last_ok else 1
     while True:
         try:
-            text = read_message(multiline=args.multiline)
+            text = read_message(
+                multiline=args.multiline,
+                network=agent.network,
+                chat_mode=getattr(agent, 'chat_mode', 'auto'),
+                session_lane=getattr(agent, 'session_lane', 'chat'),
+            )
         except KeyboardInterrupt:
-            print('\n已取消本次输入。输入 /exit 退出。')
-            continue
+            print('\n' + ok('已退出对话。'))
+            return 0
         except EOFError:
             print()
             return 0
-        if text in ('/exit', '/quit', '/q'):
-            return 0
-        if text.startswith('/network'):
-            parts = text.split()
-            if len(parts) == 2 and parts[1] in ('auto', 'on', 'off'):
-                agent.network = parts[1]
-            print(f'联网模式: {agent.network}。用法: /network auto|on|off')
-            continue
-        if text == '/sources':
-            print(json.dumps(agent.last_tools, ensure_ascii=False, indent=2))
-            continue
-        if text == '/clear':
-            agent.clear()
-            print('已清除当前对话和 PR/Issue 上下文。')
-            continue
-        if text == '/context':
-            if not agent.context_summary:
-                print('当前没有获取到的 PR/Issue。')
-            for context in agent.context_summary:
-                print(f"[{context['type']}] {context['title']}\n{context['url']}")
-                for warning in context['warnings']:
-                    print(f'[范围限制] {warning}')
-            continue
-        if text == '/help':
-            print('发送 PR/Issue URL 开始分析；可继续追问。')
-            print('/paste 进入多行输入，/send 发送，/cancel 取消；多行模式支持空行和缩进。')
-            print('/network auto|on|off 切换联网资料获取；/sources 查看最近调查来源。')
-            continue
         if not text:
             continue
-        print(f"\nAgent> {agent.answer(text)}")
+        action = handle_chat_slash(text, agent, reload_client=_reload_client)
+        if action == 'exit':
+            return 0
+        if action == 'handled':
+            continue
+        begin_think('思考中')
+        interrupted = False
+        reply = ''
+        try:
+            reply = agent.answer(text)
+        except KeyboardInterrupt:
+            interrupted = True
+        end_think('已中断' if interrupted else '回答就绪')
+        if interrupted:
+            print('\n' + ok('已退出对话。'))
+            return 0
+        _print_agent_reply(reply)
+
+
+def _print_agent_reply(reply: str) -> None:
+    """Render markdown with colors inside Agent box."""
+    print_markdown_box(reply or '', title='Agent')
 
 
 def main() -> int:
@@ -292,7 +629,7 @@ def main() -> int:
         prog="reviewagent",
         description="ReviewAgent — Ascend AI Infra 智能体（Hermes 风格唤醒）",
     )
-    parser.add_argument("--version", action="version", version="ReviewAgent 1.2.0")
+    parser.add_argument("--version", action="version", version="ReviewAgent 1.5.0")
     subparsers = parser.add_subparsers(dest="command")
 
     review_parser = subparsers.add_parser("review", help="审查当前 Git 工作区")
@@ -333,6 +670,7 @@ def main() -> int:
     config_parser = subparsers.add_parser('config', help='初始化/查看/设置 ~/.reviewagent 配置')
     config_parser.add_argument('--config', default=None)
     config_parser.add_argument('--init', action='store_true', help='创建 REVIEWAGENT_HOME 与模板配置')
+    config_parser.add_argument('--wizard', action='store_true', help='交互式填写 provider / model / api_key')
     config_parser.add_argument('--show', action='store_true', help='显示当前配置（隐藏密钥）')
     config_parser.add_argument('--set', nargs='+', metavar='KEY=VALUE', help='写入配置项，如 provider=openai')
     config_parser.set_defaults(func=config_cmd)

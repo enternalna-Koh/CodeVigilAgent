@@ -9,40 +9,21 @@
 ### 启动对话
 
 ```bash
-# 方式 1: Python
-cd D:\Agent-ReviewAgent
-python chat.py
-
-# 方式 2: 批处理（Windows）
-双击 chat.bat
+reviewagent              # 推荐：Logo + 首次 API 引导 + 对话
+# 或
+npm install -g reviewagent && reviewagent
 ```
 
 ### 首次使用
 
-首次启动会进入配置向导：
+直接运行 `reviewagent`。若未配置 API，会像 Claude Code 一样自动进入引导：
 
-```
-[WELCOME] 欢迎使用 ReviewAgent 对话式智能体！
-========================================
+1. 选择 Provider（DeepSeek / OpenAI 兼容 / Claude / GLM）
+2. **从列表选择模型**（勿手写错误 ID，如误写成 `deepseek v4 flash`）
+3. 隐藏输入 API Key（也可改用 cc-switch 注入 `OPENAI_API_KEY`）
+4. 保存到 `~/.reviewagent/ai_config.json` 后进入对话
 
-首次使用需要配置 AI 服务。
-
-支持的 AI 服务:
-  1. DeepSeek (推荐，性价比最高)
-  2. OpenAI (GPT-4, GPT-3.5)
-  3. Claude (Anthropic)
-  4. GLM (智谱清言)
-
-请选择 AI 服务 (1-4): 1
-
-[选择] DeepSeek
-
-请输入你的 DEEPSEEK API Key:
-API Key: sk-xxxxx
-
-[OK] 配置已保存！
-[OK] AI 服务已连接
-```
+重配：`reviewagent config --wizard`
 
 ---
 

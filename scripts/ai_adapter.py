@@ -10,6 +10,45 @@ import urllib.request
 import urllib.parse
 
 
+def _format_http_error(exc) -> str:
+    """Surface provider error body (400 reason) instead of bare HTTP Error 400."""
+    import urllib.error
+    if isinstance(exc, urllib.error.HTTPError):
+        body = ''
+        try:
+            raw = exc.read()
+            body = raw.decode('utf-8', errors='replace')[:800] if raw else ''
+        except Exception:
+            body = ''
+        hint = ''
+        lower = (body + str(exc.reason)).lower()
+        model_hint = ''
+        if 'vl' in lower or 'vision' in lower or 'image' in lower:
+            model_hint = '（当前模型可能是视觉/多模态，对话请改用文本模型，如 MiniMax-Text-01 / MiniMax-M1）'
+        if exc.code == 400:
+            hint = model_hint or '（常见原因：模型 ID 不支持 chat、参数不兼容、或 base_url 不对）'
+        detail = f' — {body}' if body else ''
+        return f'Error: HTTP {exc.code} {exc.reason}{detail}{hint}'
+    return f'Error: {exc}'
+
+
+def _post_json(url: str, headers: Dict, data: Dict, timeout: int = 60) -> Dict:
+    import urllib.error
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(data).encode('utf-8'),
+        headers=headers,
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return json.loads(response.read().decode('utf-8'))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(_format_http_error(exc)) from exc
+    except Exception as exc:
+        raise RuntimeError(f'Error: {exc}') from exc
+
+
 class AIProvider(ABC):
     """AI 服务提供商基类"""
 
@@ -47,32 +86,32 @@ class DeepSeekProvider(AIProvider):
             "max_tokens": max_tokens
         }
 
-        req = urllib.request.Request(
-            self.get_api_url(),
-            data=json.dumps(data).encode('utf-8'),
-            headers=headers,
-            method='POST'
-        )
-
         try:
-            with urllib.request.urlopen(req, timeout=30) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                return result['choices'][0]['message']['content']
+            result = _post_json(self.get_api_url(), headers, data)
+            return result['choices'][0]['message']['content']
         except Exception as e:
-            return f"Error: {str(e)}"
+            return str(e) if str(e).startswith('Error:') else f'Error: {e}'
 
 
 class OpenAIProvider(AIProvider):
-    """OpenAI / Azure OpenAI"""
+    """OpenAI / Azure OpenAI / OpenAI-compatible gateways"""
 
     def __init__(self, api_key: str, model: str, base_url: str = "https://api.openai.com/v1"):
         super().__init__(api_key, model)
-        self.base_url = base_url
+        self.base_url = (base_url or "https://api.openai.com/v1").rstrip('/')
 
     def get_api_url(self) -> str:
         return f"{self.base_url}/chat/completions"
 
     def chat(self, messages: List[Dict], temperature: float = 0.7, max_tokens: int = 2000) -> str:
+        # Vision-only model IDs often 400 on text chat
+        if any(x in (self.model or '').lower() for x in ('-vl', 'vl-', 'vision')):
+            return (
+                f'Error: 模型 `{self.model}` 像是视觉/多模态模型，纯文本对话常会 HTTP 400。'
+                f'请改用文本模型（MiniMax 可用 MiniMax-Text-01 / MiniMax-M1）：'
+                f'`reviewagent model --name MiniMax-Text-01`'
+            )
+
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -85,19 +124,11 @@ class OpenAIProvider(AIProvider):
             "max_tokens": max_tokens
         }
 
-        req = urllib.request.Request(
-            self.get_api_url(),
-            data=json.dumps(data).encode('utf-8'),
-            headers=headers,
-            method='POST'
-        )
-
         try:
-            with urllib.request.urlopen(req, timeout=30) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                return result['choices'][0]['message']['content']
+            result = _post_json(self.get_api_url(), headers, data)
+            return result['choices'][0]['message']['content']
         except Exception as e:
-            return f"Error: {str(e)}"
+            return str(e) if str(e).startswith('Error:') else f'Error: {e}'
 
 
 class ClaudeProvider(AIProvider):
@@ -141,11 +172,10 @@ class ClaudeProvider(AIProvider):
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=30) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                return result['content'][0]['text']
+            result = _post_json(self.get_api_url(), headers, data)
+            return result['content'][0]['text']
         except Exception as e:
-            return f"Error: {str(e)}"
+            return str(e) if str(e).startswith('Error:') else f'Error: {e}'
 
 
 class GLMProvider(AIProvider):
@@ -167,19 +197,11 @@ class GLMProvider(AIProvider):
             "max_tokens": max_tokens
         }
 
-        req = urllib.request.Request(
-            self.get_api_url(),
-            data=json.dumps(data).encode('utf-8'),
-            headers=headers,
-            method='POST'
-        )
-
         try:
-            with urllib.request.urlopen(req, timeout=30) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                return result['choices'][0]['message']['content']
+            result = _post_json(self.get_api_url(), headers, data)
+            return result['choices'][0]['message']['content']
         except Exception as e:
-            return f"Error: {str(e)}"
+            return str(e) if str(e).startswith('Error:') else f'Error: {e}'
 
 
 class AIClient:
@@ -202,8 +224,15 @@ class AIClient:
             model: 模型名称
             **kwargs: 额外参数（如 OpenAI 的 base_url）
         """
+        # Unknown labels (gemini/xai/minimax/qwen/doubao/…) → OpenAI-compatible HTTP
         if provider not in self.PROVIDERS:
-            raise ValueError(f"Unsupported provider: {provider}")
+            if kwargs.get('base_url'):
+                provider = 'openai'
+            else:
+                raise ValueError(
+                    f"Unsupported provider: {provider}. "
+                    "Use openai + base_url, or deepseek/claude/glm."
+                )
 
         provider_class = self.PROVIDERS[provider]
         self.provider_name = provider
