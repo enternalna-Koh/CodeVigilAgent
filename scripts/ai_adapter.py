@@ -206,7 +206,13 @@ class AIClient:
             raise ValueError(f"Unsupported provider: {provider}")
 
         provider_class = self.PROVIDERS[provider]
-        self.provider = provider_class(api_key, model, **kwargs)
+        self.provider_name = provider
+        self.model_name = model
+        if provider == 'openai':
+            base_url = kwargs.get('base_url') or 'https://api.openai.com/v1'
+            self.provider = provider_class(api_key, model, base_url=base_url)
+        else:
+            self.provider = provider_class(api_key, model)
 
     def chat(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
         """
@@ -248,13 +254,48 @@ class AIClient:
 # ============================================================================
 
 def load_config_from_env() -> Dict:
-    """从环境变量加载配置"""
-    return {
-        'provider': os.getenv('AI_PROVIDER', 'deepseek'),
-        'api_key': os.getenv('AI_API_KEY', ''),
-        'model': os.getenv('AI_MODEL', 'deepseek-chat'),
-        'base_url': os.getenv('AI_BASE_URL', '')  # For OpenAI-compatible APIs
+    """从环境变量加载配置（兼容 cc-switch / OpenAI / Anthropic 注入）。
+
+    识别顺序（后者不覆盖已有非空值，由 merge 控制）：
+    - AI_PROVIDER / AI_API_KEY / AI_MODEL / AI_BASE_URL
+    - OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL  → provider=openai
+    - ANTHROPIC_API_KEY / ANTHROPIC_MODEL → provider=claude
+    """
+    config: Dict = {
+        'provider': os.getenv('AI_PROVIDER', '').strip(),
+        'api_key': os.getenv('AI_API_KEY', '').strip(),
+        'model': os.getenv('AI_MODEL', '').strip(),
+        'base_url': os.getenv('AI_BASE_URL', '').strip(),
     }
+
+    openai_key = os.getenv('OPENAI_API_KEY', '').strip()
+    if openai_key:
+        if not config['api_key']:
+            config['api_key'] = openai_key
+        if not config['provider']:
+            config['provider'] = 'openai'
+        if not config['base_url']:
+            config['base_url'] = (
+                os.getenv('OPENAI_BASE_URL', '').strip() or 'https://api.openai.com/v1'
+            )
+        if not config['model']:
+            config['model'] = os.getenv('OPENAI_MODEL', '').strip() or 'gpt-4o'
+
+    anthropic_key = os.getenv('ANTHROPIC_API_KEY', '').strip()
+    if anthropic_key and not config.get('api_key'):
+        config['api_key'] = anthropic_key
+        if not config['provider']:
+            config['provider'] = 'claude'
+        if not config['model']:
+            config['model'] = (
+                os.getenv('ANTHROPIC_MODEL', '').strip() or 'claude-3-5-sonnet-20241022'
+            )
+
+    if config.get('api_key') and not config.get('provider'):
+        config['provider'] = 'openai' if config.get('base_url') else 'deepseek'
+    if config.get('api_key') and not config.get('model'):
+        config['model'] = 'deepseek-chat' if config['provider'] == 'deepseek' else 'gpt-4o'
+    return {k: v for k, v in config.items() if v}
 
 
 def load_config_from_file(config_file: str = 'config/ai_config.json') -> Dict:
@@ -263,36 +304,55 @@ def load_config_from_file(config_file: str = 'config/ai_config.json') -> Dict:
         return {}
 
     with open(config_file, 'r', encoding='utf-8') as f:
-        return json.load(f)
+        data = json.load(f)
+    # Ignore template placeholder keys that are not credentials
+    if data.get('api_key') in ('', 'YOUR_API_KEY_HERE'):
+        data = {**data, 'api_key': ''}
+    return data
+
+
+def merge_config(file_cfg: Dict, env_cfg: Dict) -> Dict:
+    """环境变量优先（便于 cc-switch 热切换），文件补齐缺省。"""
+    merged = dict(file_cfg or {})
+    for key, value in (env_cfg or {}).items():
+        if value:
+            merged[key] = value
+    return merged
 
 
 def get_ai_client(config_file: Optional[str] = None) -> AIClient:
     """
     获取配置好的 AI 客户端
 
-    优先级: 配置文件 > 环境变量
+    优先级: 环境变量（含 OPENAI_* / ANTHROPIC_* / AI_*）> 配置文件
+    配置文件默认解析顺序见 scripts.agent_home.resolve_config_file
     """
-    # 先尝试从配置文件加载
-    config = {}
-    if config_file:
-        config = load_config_from_file(config_file)
+    from scripts.agent_home import resolve_config_file
 
-    # 如果没有配置文件，从环境变量加载
-    if not config:
-        config = load_config_from_env()
+    path = resolve_config_file(config_file)
+    file_cfg = load_config_from_file(path)
+    env_cfg = load_config_from_env()
+    config = merge_config(file_cfg, env_cfg)
 
     if not config.get('api_key'):
-        raise ValueError("API key not configured. Set AI_API_KEY env var or create config file.")
+        raise ValueError(
+            "API key not configured. Set OPENAI_API_KEY / AI_API_KEY, "
+            "or run `reviewagent config`, or create ~/.reviewagent/ai_config.json."
+        )
 
-    # 提取 base_url (for OpenAI-compatible)
+    provider = (config.get('provider') or 'openai').strip().lower()
+    model = config.get('model') or 'gpt-4o'
     kwargs = {}
     if config.get('base_url'):
         kwargs['base_url'] = config['base_url']
+    # OpenAI-compatible custom gateways often still use provider=openai
+    if provider not in AIClient.PROVIDERS and config.get('base_url'):
+        provider = 'openai'
 
     return AIClient(
-        provider=config['provider'],
+        provider=provider,
         api_key=config['api_key'],
-        model=config['model'],
+        model=model,
         **kwargs
     )
 

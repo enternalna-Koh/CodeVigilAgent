@@ -55,12 +55,16 @@ def main():
     """主入口"""
     # All current Agent commands share one runtime. Keep old file/config/stats
     # shortcuts below for backwards compatibility.
-    if len(sys.argv) == 1 or sys.argv[1] in ('chat', 'review', 'search', 'test', '--help', '-h', '--version'):
+    agent_cmds = (
+        'chat', 'review', 'search', 'test', 'config', 'doctor', 'model',
+        '--help', '-h', '--version',
+    )
+    if len(sys.argv) == 1 or sys.argv[1] in agent_cmds:
         from ascend_cli import main as agent_main
         return agent_main()
     parser = argparse.ArgumentParser(
-        prog='review',
-        description='ReviewAgent - 智能代码审查助手',
+        prog='reviewagent',
+        description='ReviewAgent - Ascend AI Infra 智能体',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:

@@ -2,6 +2,16 @@
 
 ---
 
+## v1.2.0 / v3.3 - Hermes 风格全局 CLI (2026-10-15)
+
+- npm 包名 `reviewagent`；唤醒命令 `reviewagent` / `ra`（保留 `review`）
+- 用户配置家目录 `~/.reviewagent`（`REVIEWAGENT_HOME`）
+- `config` / `doctor` / `model` 子命令
+- 环境变量优先：`OPENAI_*` / `ANTHROPIC_*` / `AI_*`，兼容 cc-switch
+- 文档：`docs/INSTALL_HERMES_STYLE.md`、`docs/CC_SWITCH.md`
+
+---
+
 ## v3.2 - 可靠性回归落地 + 专业 Agent CLI (2026-10-15)
 
 ### 同步自远程 `5a82576`

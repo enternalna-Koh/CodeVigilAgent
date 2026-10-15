@@ -1,11 +1,11 @@
 ﻿# ReviewAgent - 智能代码审查助手
 
-专为昇腾 NPU 生态打造的 AI 代码审查系统（Cursor/Codex Subagent + 本地 CLI）。
+专为昇腾 NPU / AI Infra 打造的智能体（Hermes 风格 CLI + Cursor Subagent）。
 
-仓库：[`enternalna-Koh/ReviewAgent`](https://github.com/enternalna-Koh/ReviewAgent)（别名 `Agent`）。
+仓库：[`enternalna-Koh/ReviewAgent`](https://github.com/enternalna-Koh/ReviewAgent)。
 
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ### Cursor 智能体
 
@@ -18,22 +18,20 @@
 
 ---
 
-## 🚀 30 秒快速开始
+## 🚀 30 秒快速开始（Hermes 风格）
 
 ```bash
-# 1. 进入项目目录
-cd D:\Agent-ReviewAgent
+npm install -g reviewagent   # 或在本仓: npm install && npm link
 
-# 2. 初始化配置（首次使用）
-python review_cli.py config --init
-# 编辑 config/ai_config.json 填入你的 API Key
-
-# 3. 运行测试
-python review_cli.py test
-
-# 4. 审查你的代码
-python review_cli.py your_code.py
+reviewagent                  # 唤醒 Agent（对话）
+reviewagent review           # 审查当前 git diff
+reviewagent doctor           # 环境自检
+reviewagent config --init    # 写入 ~/.reviewagent/ai_config.json
 ```
+
+模型可用 **cc-switch** 注入的 `OPENAI_*` / `ANTHROPIC_*`（环境变量优先）。详见 [docs/CC_SWITCH.md](docs/CC_SWITCH.md)、[docs/INSTALL_HERMES_STYLE.md](docs/INSTALL_HERMES_STYLE.md)。
+
+短命令：`ra` · 旧命令：`review`。
 
 ### 仓库级 Agent CLI
 

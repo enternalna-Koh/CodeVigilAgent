@@ -1,108 +1,80 @@
 #!/usr/bin/env node
 /**
- * ReviewAgent 安装脚本
- * npm install -g @reviewagent/cli 后自动执行
+ * postinstall — Hermes-style bootstrap for ReviewAgent
  */
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
-
+const os = require('os');
 const { findPython } = require('./bin/python-launcher');
 
-const chalk = require('chalk');
-const boxen = require('boxen');
+let chalk, boxen;
+try {
+  chalk = require('chalk');
+  boxen = require('boxen');
+} catch {
+  chalk = { green: (s) => s, red: (s) => s, yellow: (s) => s, cyan: (s) => s, bold: { cyan: (s) => s, green: (s) => s, yellow: (s) => s } };
+  chalk.bold = Object.assign((s) => s, chalk.bold);
+  boxen = (s) => s;
+}
 
-console.log('\n');
-console.log(boxen(
-  chalk.bold.cyan('ReviewAgent') + ' 安装中...',
-  {
-    padding: 1,
-    margin: 1,
-    borderStyle: 'round',
-    borderColor: 'cyan'
+const HOME = process.env.REVIEWAGENT_HOME || path.join(os.homedir(), '.reviewagent');
+const TEMPLATE = path.join(__dirname, 'config', 'ai_config.json.template');
+const HOME_CONFIG = path.join(HOME, 'ai_config.json');
+
+function ensureHome() {
+  if (!fs.existsSync(HOME)) {
+    fs.mkdirSync(HOME, { recursive: true });
+    console.log(chalk.green('✓'), `已创建 ${HOME}`);
   }
-));
+  if (!fs.existsSync(HOME_CONFIG) && fs.existsSync(TEMPLATE)) {
+    fs.copyFileSync(TEMPLATE, HOME_CONFIG);
+    console.log(chalk.green('✓'), `已写入配置模板 ${HOME_CONFIG}`);
+  }
+}
 
-// 检查 Python
 function checkPython() {
   try {
     const found = findPython();
     const launcher = [found.command, ...found.args].join(' ');
-    console.log(chalk.green('✓'), `Python 已安装: ${found.version}（${launcher}）`);
+    console.log(chalk.green('✓'), `Python: ${found.version}（${launcher}）`);
     return true;
-  } catch (err) {
-    console.log(chalk.red('✗'), 'Python 未找到');
+  } catch {
+    console.log(chalk.red('✗'), '未找到 Python 3.7+');
     return false;
   }
 }
 
-// 安装 Python 依赖（如果需要）
-function installPythonDeps() {
-  const requirementsPath = path.join(__dirname, 'requirements.txt');
-
-  if (fs.existsSync(requirementsPath)) {
-    try {
-      console.log(chalk.yellow('⋯'), '安装 Python 依赖...');
-      execSync('pip install -r requirements.txt', { stdio: 'inherit' });
-      console.log(chalk.green('✓'), 'Python 依赖已安装');
-    } catch (err) {
-      console.log(chalk.yellow('⚠'), 'Python 依赖安装失败（可选）');
-    }
-  }
-}
-
-// 创建配置目录
-function createConfigDir() {
-  const configDir = path.join(__dirname, 'config');
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-    console.log(chalk.green('✓'), '配置目录已创建');
-  }
-}
-
-// 主安装流程
 function main() {
-  console.log('\n' + chalk.bold('安装步骤:') + '\n');
+  console.log('\n' + boxen(chalk.bold.cyan('ReviewAgent') + ' · Ascend AI Infra', {
+    padding: 1, margin: 1, borderStyle: 'round', borderColor: 'cyan',
+  }));
 
-  // 1. 检查 Python
-  const hasPython = checkPython();
+  console.log(chalk.bold('安装检查:\n'));
+  const ok = checkPython();
+  ensureHome();
 
-  if (!hasPython) {
+  if (!ok) {
     console.log('\n' + boxen(
-      chalk.yellow.bold('警告\n\n') +
-      'ReviewAgent 需要 Python 3.7+ 才能运行\n\n' +
-      '请访问: ' + chalk.cyan('https://www.python.org/downloads/') + '\n' +
-      '安装 Python 后重新安装 ReviewAgent',
-      {
-        padding: 1,
-        borderStyle: 'round',
-        borderColor: 'yellow'
-      }
+      chalk.yellow.bold('需要 Python\n\n') +
+      '请安装 Python 3.7+ 后重试：https://www.python.org/downloads/',
+      { padding: 1, borderStyle: 'round', borderColor: 'yellow' },
     ));
-    process.exit(1);
   }
 
-  // 2. 创建配置目录
-  createConfigDir();
-
-  // 3. 安装依赖（可选）
-  // installPythonDeps();
-
-  // 完成
   console.log('\n' + boxen(
-    chalk.green.bold('✓ 安装完成！\n\n') +
-    '现在你可以使用:\n\n' +
-    chalk.cyan('  review') + ' - 进入对话模式\n' +
-    chalk.cyan('  review code.py') + ' - 快速审查文件\n' +
-    chalk.cyan('  review --help') + ' - 查看帮助\n\n' +
-    '首次运行会引导你配置 AI 服务',
-    {
-      padding: 1,
-      margin: 1,
-      borderStyle: 'round',
-      borderColor: 'green'
-    }
+    chalk.green.bold('唤醒 Agent（类似 hermes）\n\n') +
+    chalk.cyan('  reviewagent') + '              # 对话模式\n' +
+    chalk.cyan('  reviewagent review') + '       # 审查当前仓库 diff\n' +
+    chalk.cyan('  reviewagent search "HCCL"') + ' # 本地案例\n' +
+    chalk.cyan('  reviewagent config') + '        # 配置模型\n' +
+    chalk.cyan('  reviewagent doctor') + '        # 环境自检\n' +
+    chalk.cyan('  ra') + ' / ' + chalk.cyan('review') + '             # 短命令别名\n\n' +
+    '模型切换（兼容 cc-switch）:\n' +
+    '  导出 OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL\n' +
+    '  或 ANTHROPIC_API_KEY，然后直接 ' + chalk.cyan('reviewagent') + '\n' +
+    '  文档: docs/CC_SWITCH.md',
+    { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'green' },
   ));
 }
 

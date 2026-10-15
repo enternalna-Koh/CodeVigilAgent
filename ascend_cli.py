@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""昇腾 AI Infra Agent CLI.
+"""ReviewAgent — Ascend AI Infra Agent CLI (Hermes-style).
 
-The first version focuses on a reliable repository review workflow. AI tool
-loops and automatic patching can be added behind the same command surface.
+Wake: `reviewagent` (or `review` / `ra`)
+Install: `npm install -g reviewagent`
+Model: env via cc-switch (OPENAI_* / ANTHROPIC_* / AI_*) or `reviewagent config`
 """
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -14,10 +16,17 @@ from scripts.repo_context import RepoContextError, collect_repo_context, format_
 from scripts.smart_reviewer import SmartReviewer
 from scripts.agent_tools import find_test_commands, run_command
 from scripts.knowledge_search import KnowledgeSearch, PROJECT_ROOT
-from scripts.ai_adapter import get_ai_client
+from scripts.ai_adapter import get_ai_client, load_config_from_env, load_config_from_file, merge_config
 from scripts.conversation_agent import ConversationAgent
 from scripts.chat_input import read_message
 from scripts.specialist_context import resolve_specialist
+from scripts.agent_home import ensure_home, resolve_config_file, config_path, home_dir, write_config, read_config
+
+
+def _default_config(cli_value: str = None) -> str:
+    if cli_value and cli_value not in ('unused.json',):
+        return cli_value
+    return resolve_config_file(None)
 
 
 def review(args: argparse.Namespace) -> int:
@@ -71,7 +80,7 @@ def review(args: argparse.Namespace) -> int:
             print(f"[INFO] 未加载专业 Agent（{specialist.reason or specialist.status}）；使用通用审查。"
                   "需要时可加 --scenario operator|inference。", file=sys.stderr)
 
-    reviewer = SmartReviewer(args.config, verbose=not args.json)
+    reviewer = SmartReviewer(_default_config(args.config), verbose=not args.json)
     if args.offline:
         reviewer.has_ai = False
     report = reviewer.review(
@@ -123,13 +132,108 @@ def search(args: argparse.Namespace) -> int:
     return 0
 
 
+def doctor(args: argparse.Namespace) -> int:
+    """Environment / config health check (Hermes-style)."""
+    from scripts.agent_home import ensure_home
+    print('ReviewAgent doctor')
+    print(f'  home: {ensure_home()}')
+    print(f'  config: {resolve_config_file(getattr(args, "config", None))}')
+    print(f'  package: {PROJECT_ROOT}')
+    env = load_config_from_env()
+    file_cfg = load_config_from_file(resolve_config_file(getattr(args, 'config', None)))
+    merged = merge_config(file_cfg, env)
+    print(f'  provider: {merged.get("provider") or "(unset)"}')
+    print(f'  model: {merged.get("model") or "(unset)"}')
+    print(f'  base_url: {merged.get("base_url") or "(default)"}')
+    key = merged.get('api_key') or ''
+    print(f'  api_key: {"set (" + key[:4] + "…)" if key else "MISSING"}')
+    print(f'  env OPENAI_API_KEY: {"yes" if os.getenv("OPENAI_API_KEY") else "no"}')
+    print(f'  env ANTHROPIC_API_KEY: {"yes" if os.getenv("ANTHROPIC_API_KEY") else "no"}')
+    print(f'  env AI_API_KEY: {"yes" if os.getenv("AI_API_KEY") else "no"}')
+    knowledge = KnowledgeSearch()
+    print(f'  knowledge index: {len(knowledge.documents)} records')
+    if not key:
+        print('[HINT] run `reviewagent config` or export OPENAI_API_KEY (cc-switch compatible)')
+        return 1
+    try:
+        get_ai_client(getattr(args, 'config', None))
+        print('[OK] AI client can be constructed')
+        return 0
+    except Exception as exc:
+        print(f'[ERROR] {exc}')
+        return 1
+
+
+def config_cmd(args: argparse.Namespace) -> int:
+    """Init / show / set provider config under ~/.reviewagent."""
+    ensure_home()
+    path = Path(resolve_config_file(args.config if getattr(args, 'config', None) else None))
+    if args.init:
+        ensure_home()
+        print(f'[OK] home ready: {home_dir()}')
+        print(f'[OK] config: {config_path()}')
+        print('编辑 api_key / provider / model，或用 cc-switch 注入 OPENAI_* 环境变量。')
+        return 0
+    if args.show or (not args.set and not args.init):
+        data = read_config(str(path))
+        safe = {**data, 'api_key': ('***' if data.get('api_key') and data.get('api_key') != 'YOUR_API_KEY_HERE' else data.get('api_key'))}
+        print(json.dumps(safe, ensure_ascii=False, indent=2))
+        print(f'\n# file: {path}')
+        return 0
+    if args.set:
+        data = read_config(str(path)) or {}
+        for item in args.set:
+            if '=' not in item:
+                print(f'[ERROR] 期望 key=value，收到: {item}')
+                return 1
+            key, value = item.split('=', 1)
+            data[key.strip()] = value.strip()
+        written = write_config(data, str(path))
+        print(f'[OK] wrote {written}')
+        return 0
+    return 0
+
+
+def model_cmd(args: argparse.Namespace) -> int:
+    """Show or switch model/provider (writes ~/.reviewagent/ai_config.json)."""
+    ensure_home()
+    path = str(config_path())
+    data = read_config(path) or {}
+    if args.provider:
+        data['provider'] = args.provider
+    if args.name:
+        data['model'] = args.name
+    if args.base_url:
+        data['base_url'] = args.base_url
+        data.setdefault('provider', 'openai')
+    if args.provider or args.name or args.base_url:
+        write_config(data, path)
+        print(f"[OK] provider={data.get('provider')} model={data.get('model')} base_url={data.get('base_url') or ''}")
+        print(f'     config: {path}')
+        print('提示: cc-switch 注入的环境变量会覆盖本文件。')
+        return 0
+    env = load_config_from_env()
+    merged = merge_config(data, env)
+    print(f"active provider: {merged.get('provider')}")
+    print(f"active model:    {merged.get('model')}")
+    print(f"base_url:        {merged.get('base_url') or '(default)'}")
+    print(f"source:          {'env' if env.get('api_key') else 'file'} (+merge)")
+    return 0
+
+
 def chat(args: argparse.Namespace) -> int:
     try:
-        client = get_ai_client(args.config)
+        client = get_ai_client(_default_config(args.config))
     except Exception as exc:
         print(f"[ERROR] AI 未配置: {exc}")
-        print("[INFO] 先运行 python review_cli.py config --init，或设置 AI_API_KEY。")
+        print("[INFO] 运行 `reviewagent config` 或设置 OPENAI_API_KEY / AI_API_KEY（兼容 cc-switch）。")
         return 1
+
+    if not args.message:
+        print('ReviewAgent · Ascend AI Infra')
+        print(f'config: {_default_config(args.config)}')
+        print('输入 PR/Issue URL 或问题；/help 查看命令；/exit 退出。')
+        print()
 
     agent = ConversationAgent(client, network=args.network,
                               progress=lambda message: print(f"[Agent] {message}"))
@@ -184,13 +288,16 @@ def chat(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="ascend", description="昇腾 AI Infra 开发 Agent")
-    parser.add_argument("--version", action="version", version="ReviewAgent 1.1")
+    parser = argparse.ArgumentParser(
+        prog="reviewagent",
+        description="ReviewAgent — Ascend AI Infra 智能体（Hermes 风格唤醒）",
+    )
+    parser.add_argument("--version", action="version", version="ReviewAgent 1.2.0")
     subparsers = parser.add_subparsers(dest="command")
 
     review_parser = subparsers.add_parser("review", help="审查当前 Git 工作区")
     review_parser.add_argument("--staged", action="store_true", help="只审查暂存区")
-    review_parser.add_argument("--config", default=str(PROJECT_ROOT / "config/ai_config.json"))
+    review_parser.add_argument("--config", default=None, help="AI 配置文件（默认 ~/.reviewagent/ai_config.json）")
     review_parser.add_argument("--offline", action="store_true", help="使用本地规则和案例检索，不调用 AI")
     review_parser.add_argument("--output", "-o")
     review_parser.add_argument("--json", action="store_true", help="输出 JSON")
@@ -215,13 +322,30 @@ def main() -> int:
     search_parser.add_argument('--json', action='store_true')
     search_parser.set_defaults(func=search)
 
-    chat_parser = subparsers.add_parser('chat', help='自然语言分析 PR/Issue，并连续追问')
-    chat_parser.add_argument('--config', default=str(PROJECT_ROOT / 'config/ai_config.json'))
+    chat_parser = subparsers.add_parser('chat', help='唤醒对话 Agent（默认命令）')
+    chat_parser.add_argument('--config', default=None)
     chat_parser.add_argument('--message', '-m', help='一次性自然语言请求')
     chat_parser.add_argument('--multiline', action='store_true', help='每条消息都使用多行输入，/send 发送')
     chat_parser.add_argument('--network', choices=['auto', 'on', 'off'], default='auto',
                              help='auto 按需联网；on 每轮搜索；off 禁用外部资料获取（AI 调用仍联网）')
     chat_parser.set_defaults(func=chat)
+
+    config_parser = subparsers.add_parser('config', help='初始化/查看/设置 ~/.reviewagent 配置')
+    config_parser.add_argument('--config', default=None)
+    config_parser.add_argument('--init', action='store_true', help='创建 REVIEWAGENT_HOME 与模板配置')
+    config_parser.add_argument('--show', action='store_true', help='显示当前配置（隐藏密钥）')
+    config_parser.add_argument('--set', nargs='+', metavar='KEY=VALUE', help='写入配置项，如 provider=openai')
+    config_parser.set_defaults(func=config_cmd)
+
+    doctor_parser = subparsers.add_parser('doctor', help='检查 Python/配置/模型环境')
+    doctor_parser.add_argument('--config', default=None)
+    doctor_parser.set_defaults(func=doctor)
+
+    model_parser = subparsers.add_parser('model', help='查看或切换 provider/model（可与 cc-switch 配合）')
+    model_parser.add_argument('--provider', choices=['openai', 'deepseek', 'claude', 'glm'])
+    model_parser.add_argument('--name', help='模型名，如 deepseek-chat / gpt-4o')
+    model_parser.add_argument('--base-url', help='OpenAI 兼容网关 base_url')
+    model_parser.set_defaults(func=model_cmd)
 
     args = parser.parse_args()
     if args.command is None:

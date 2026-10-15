@@ -1,24 +1,30 @@
 {
-  "name": "@reviewagent/cli",
-  "version": "1.0.0",
-  "description": "ReviewAgent - 智能代码审查助手，专为昇腾 NPU 生态打造",
-  "main": "index.js",
+  "name": "reviewagent",
+  "version": "1.2.0",
+  "description": "ReviewAgent — Ascend AI Infra agent (Hermes-style CLI). Wake with `reviewagent`. Works with cc-switch via OPENAI_*/ANTHROPIC_* env.",
+  "main": "bin/reviewagent.js",
   "bin": {
+    "reviewagent": "./bin/reviewagent.js",
+    "ra": "./bin/reviewagent.js",
     "review": "./bin/review.js"
   },
   "scripts": {
     "postinstall": "node install.js",
-    "test": "node bin/review.js --version"
+    "test": "node bin/reviewagent.js --version"
   },
   "keywords": [
-    "review",
+    "reviewagent",
+    "hermes",
+    "claude-code",
+    "cc-switch",
     "code-review",
-    "ai",
-    "npu",
+    "ai-infra",
     "ascend",
-    "huawei",
+    "npu",
+    "cann",
     "pytorch",
-    "mindspore"
+    "mindspore",
+    "vllm"
   ],
   "author": "ReviewAgent Team",
   "license": "Apache-2.0",
