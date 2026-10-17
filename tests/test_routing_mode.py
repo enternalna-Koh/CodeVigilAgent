@@ -25,7 +25,9 @@ class RoutingModeTests(unittest.TestCase):
         self.assertTrue(is_infra_query('随便', has_urls=True))
         self.assertTrue(is_infra_query('长文', has_new_artifact=True))
         self.assertTrue(is_infra_query('507049 怎么排查？'))
-        self.assertTrue(is_infra_query('查版本'))
+        self.assertFalse(is_infra_query('查版本'))
+        self.assertFalse(is_infra_query('今天走了 12345 步'))
+        self.assertFalse(is_infra_query('订单 1234567 已送达'))
         self.assertFalse(is_infra_query('今天天气怎么样', has_urls=False))
         # Sticky context alone must NOT force infra on ack / unrelated long chat
         self.assertFalse(is_infra_query('好的', has_context=True, session_lane='work'))

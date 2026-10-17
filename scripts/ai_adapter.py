@@ -349,7 +349,7 @@ def merge_config(file_cfg: Dict, env_cfg: Dict) -> Dict:
     return merged
 
 
-def get_ai_client(config_file: Optional[str] = None) -> AIClient:
+def get_ai_client(config_file: Optional[str] = None, overrides: Optional[Dict] = None) -> AIClient:
     """
     获取配置好的 AI 客户端
 
@@ -362,6 +362,8 @@ def get_ai_client(config_file: Optional[str] = None) -> AIClient:
     file_cfg = load_config_from_file(path)
     env_cfg = load_config_from_env()
     config = merge_config(file_cfg, env_cfg)
+    # Explicit in-chat switches override inherited environment values for this session.
+    config.update(overrides or {})
 
     if not config.get('api_key'):
         raise ValueError(

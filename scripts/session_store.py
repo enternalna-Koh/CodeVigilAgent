@@ -20,7 +20,7 @@ def sessions_dir() -> Path:
 
 
 def _stamp() -> str:
-    return datetime.now().strftime('%Y%m%d-%H%M%S')
+    return datetime.now().strftime('%Y%m%d-%H%M%S-%f')
 
 
 def serialize_agent(agent) -> Dict[str, Any]:
@@ -30,7 +30,7 @@ def serialize_agent(agent) -> Dict[str, Any]:
         pending = {
             'summary': getattr(fix, 'summary', ''),
             'scenario': getattr(fix, 'scenario', ''),
-            'files': getattr(fix, 'files', []) or [],
+            'files': [edit.as_dict() for edit in fix.files],
         }
     return {
         'version': 1,
@@ -51,6 +51,22 @@ def serialize_agent(agent) -> Dict[str, Any]:
 def apply_to_agent(agent, data: Dict[str, Any]) -> None:
     if not isinstance(data, dict):
         raise ValueError('会话数据格式无效')
+    root = data.get('work_root')
+    if not isinstance(root, str) or not root or not Path(root).is_absolute():
+        raise ValueError('会话工作目录缺失或无效，请重新分析后保存')
+    root = Path(root).resolve(strict=True)
+    if not root.is_dir():
+        raise ValueError('会话工作目录不是目录')
+    for key, choices in (('chat_mode', ('auto', 'chat', 'work')),
+                         ('session_lane', ('chat', 'work')),
+                         ('network', ('auto', 'on', 'off'))):
+        if data.get(key, choices[0]) not in choices:
+            raise ValueError(f'会话 {key} 无效')
+    for key in ('history', 'contexts'):
+        rows = data.get(key, [])
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ValueError(f'会话 {key} 格式无效')
+    agent.work_root = root
     agent.chat_mode = data.get('chat_mode') or 'auto'
     agent.session_lane = data.get('session_lane') or 'chat'
     network = data.get('network') or 'auto'
@@ -83,12 +99,11 @@ def load_session(path: Optional[str] = None) -> Dict[str, Any]:
     root = sessions_dir()
     if path:
         p = Path(path).expanduser()
-        if not p.is_file():
-            # allow bare name under sessions/
-            alt = root / path
-            if not alt.suffix:
-                alt = root / f'{path}.json'
-            p = alt if alt.is_file() else p
+        # Bare session names take precedence over same-named files in cwd.
+        if Path(path).name == path:
+            saved = root / (path if Path(path).suffix else f'{path}.json')
+            if saved.is_file():
+                p = saved
     else:
         p = root / LATEST_NAME
     if not p.is_file():
@@ -141,11 +156,11 @@ def clean_sessions(keep: int = 5, *, wipe_all: bool = False) -> Dict[str, Any]:
     kept: List[str] = []
     if wipe_all:
         for p in files:
-            p.unlink(missing_ok=True)
+            p.unlink()
             deleted.append(p.name)
         latest = root / LATEST_NAME
         if latest.exists():
-            latest.unlink(missing_ok=True)
+            latest.unlink()
             deleted.append(LATEST_NAME)
         return {'deleted': deleted, 'kept': kept, 'keep': 0}
 
@@ -154,6 +169,6 @@ def clean_sessions(keep: int = 5, *, wipe_all: bool = False) -> Dict[str, Any]:
         if i < keep_n:
             kept.append(p.name)
         else:
-            p.unlink(missing_ok=True)
+            p.unlink()
             deleted.append(p.name)
     return {'deleted': deleted, 'kept': kept, 'keep': keep_n}

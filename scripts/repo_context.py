@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -14,7 +15,7 @@ class RepoContextError(RuntimeError):
 def _run_git(repo: Path, *args: str, max_output: Optional[int] = None) -> str:
     try:
         result = subprocess.run(
-            ["git", *args],
+            ["git", "-c", "core.quotepath=false", *args],
             cwd=str(repo),
             text=True,
             encoding="utf-8",
@@ -42,6 +43,22 @@ def is_git_repo(path: Path) -> bool:
         return False
 
 
+def decode_git_path(path: str) -> str:
+    """Decode Git's C-quoted UTF-8 paths, including octal escapes."""
+    if not (path.startswith('"') and path.endswith('"')):
+        return path
+    escapes = {'a': '\a', 'b': '\b', 't': '\t', 'n': '\n',
+               'v': '\v', 'f': '\f', 'r': '\r', '\\': '\\', '"': '"'}
+
+    def unescape(token):
+        token = token.decode('ascii')
+        return bytes([int(token, 8)]) if token[0].isdigit() else escapes.get(token, token).encode('utf-8')
+    raw = re.sub(rb'\\([0-7]{1,3}|.)',
+                 lambda m: unescape(m.group(1)),
+                 path[1:-1].encode('utf-8'))
+    return raw.decode('utf-8', errors='replace')
+
+
 def collect_repo_context(
     path: str = ".",
     staged: bool = False,
@@ -62,11 +79,12 @@ def collect_repo_context(
     full_diff = _run_git(root, *diff_args)
     diff = full_diff[:max_diff_chars]
 
-    file_args = ["diff", "--name-only"]
+    file_args = ["diff", "--name-only", "-z"]
     if staged:
         file_args.append("--cached")
-    changed_files: List[str] = _run_git(root, *file_args).splitlines()
-    untracked = [line[3:].strip().strip('"') for line in status.splitlines() if line.startswith('?? ')]
+    changed_files: List[str] = [name for name in _run_git(root, *file_args).split('\0') if name]
+    untracked = _run_git(root, 'ls-files', '--others', '--exclude-standard', '-z').split('\0')
+    untracked = [name for name in untracked if name]
 
     return {
         "root": str(root),

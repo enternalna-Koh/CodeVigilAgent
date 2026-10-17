@@ -50,7 +50,6 @@ INFRA_HINTS = (
     '310p', '推理部署', '算子开发', 'hidevlab', 'atlas', 'hisi',
     '社区任务', 'gitcode', 'pytorch', '一致性', '第三期', '第二期', '第一期',
     'design.md', 'ops-', '质检', '验收', 'codecheck',
-    '排查', '错误码', '报错', '查版本', '最新版本',
 )
 
 
@@ -89,7 +88,7 @@ def is_work_followup(text: str) -> bool:
         r'然后呢?', r'咋办', r'报错', r'失败', r'验收', r'补丁', r'\bfix\b',
         r'\bpr\b', r'\bissue\b', r'任务', r'这个(怎么|如何|为)', r'那个(怎么|如何)',
         r'上面', r'刚才', r'详细', r'展开', r'总结', r'方案', r'[？?]',
-        r'改一下', r'怎么改', r'怎么修', r'怎么验',
+        r'改一下', r'怎么改', r'怎么修', r'怎么验', r'(查|看|查询|检查).*版本',
     )
     return any(re.search(p, lower, re.I) for p in patterns)
 
@@ -104,8 +103,7 @@ def is_infra_query(text: str, has_context: bool = False, has_urls: bool = False,
     lower = (text or '').lower()
     if any(h.lower() in lower for h in INFRA_HINTS):
         return True
-    # Ascend/CANN-style numeric error codes (e.g. 507049)
-    if re.search(r'(?<!\d)\d{5,8}(?!\d)', text or ''):
+    if re.search(r'(?<!\d)\d{6}(?!\d)', lower) and re.search(r'排查|报错|错误|失败|error', lower):
         return True
     # Sticky context: only while session is in work lane AND message is a real follow-up
     if has_context and session_lane == 'work' and is_work_followup(text):
@@ -370,6 +368,7 @@ class ConversationAgent:
     def __init__(self, client, knowledge=None, fetcher=None, progress=None,
                  network='auto', searcher=None):
         self.client = client
+        self.model_config = None
         self.knowledge = knowledge if knowledge is not None else KnowledgeSearch()
         self.fetcher = fetcher if fetcher is not None else ContextFetcher(token=os.getenv('GITHUB_TOKEN'))
         self.progress = progress or (lambda message: None)
@@ -520,10 +519,14 @@ class ConversationAgent:
     def propose_fix(self, explicit_scenario: Optional[str] = None) -> str:
         """Generate a patch preview from active PR/Issue context. Does not write files."""
         self.last_ok = True
+        self.pending_fix = None
         if not self.contexts:
             return self._fail('没有活跃的 PR/Issue 上下文。请先粘贴 GitHub 链接完成分析，再输入 /fix。')
-        scenario, reason, specialist_text = detect_domain_from_contexts(
-            self.contexts, explicit=explicit_scenario)
+        try:
+            scenario, reason, specialist_text = detect_domain_from_contexts(
+                self.contexts, explicit=explicit_scenario)
+        except (ValueError, OSError) as exc:
+            return self._fail(f'专业上下文未就绪：{exc}')
         self.progress(f'识别领域: {scenario}（{reason or "n/a"}）')
         if scenario in ('operator', 'inference') and not specialist_text:
             self.progress('专业规范未加载到正文，将用通用规则生成补丁预览')
@@ -532,7 +535,7 @@ class ConversationAgent:
             'instruction': '请基于证据生成可本地应用的最小补丁 JSON。',
             'scenario': scenario,
             'specialist_reason': reason,
-            'specialist_rules': (specialist_text or '')[:12000],
+            'specialist_rules': specialist_text or '',
             'active_pr_issues': self.contexts,
             'recent_dialogue': self.history[-4:],
             'work_root': str(self.work_root),
@@ -547,10 +550,13 @@ class ConversationAgent:
             )
         except Exception:
             return self._fail('生成补丁时 AI 请求异常。')
-        if not isinstance(raw, str) or raw.startswith('Error:'):
+        if not isinstance(raw, str) or not raw.strip() or raw.lstrip().startswith('Error:'):
             return self._fail('生成补丁失败：' + (raw if isinstance(raw, str) else '未知错误'))
 
-        fix = parse_fix_json(raw)
+        try:
+            fix = parse_fix_json(raw)
+        except ValueError as exc:
+            return self._fail(f'补丁格式错误：{exc}。请重新 /fix。')
         fix.specialist_reason = reason
         if not fix.scenario or fix.scenario == 'general':
             fix.scenario = scenario
@@ -709,6 +715,9 @@ class ConversationAgent:
         )
         infra = turn == 'infra'
         light = turn == 'light'
+        if (self.chat_mode == 'auto' and turn == 'general' and
+                re.fullmatch(r'(?:查|看|查询|检查)(?:一下)?版本[？?！!。 ]*', text.strip())):
+            return self._fail('请说明要查询哪个组件的版本，例如 CANN、torch-npu 或 vLLM-Ascend。')
         prev_lane = self.session_lane
         new_lane = lane_for_turn(turn)
         if self.chat_mode == 'auto' and new_lane != prev_lane:
@@ -760,7 +769,7 @@ class ConversationAgent:
             response = self.client.chat_with_history(messages, temperature=0.3, max_tokens=3000)
         except Exception:
             return self._fail('AI 请求异常，已保留获取的上下文；请检查网络或服务配置后重试。')
-        if not isinstance(response, str) or response.startswith('Error:'):
+        if not isinstance(response, str) or not response.strip() or response.lstrip().startswith('Error:'):
             return self._fail('AI 调用失败，已保留获取的上下文，可以重试。' +
                               ('\n' + response if isinstance(response, str) else ''))
         self.history.extend([{'role': 'user', 'content': text[:8000]},

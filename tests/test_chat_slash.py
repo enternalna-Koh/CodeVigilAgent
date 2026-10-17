@@ -71,7 +71,7 @@ class SlashDispatchTests(unittest.TestCase):
         self.assertEqual(result, 'handled')
         self.assertEqual(written.get('model'), 'MiniMax-M1')
         self.assertIn('立即生效', out)
-        reload_client.assert_called_once()
+        reload_client.assert_called_once_with(written)
 
     def test_model_switch_cross_vendor_requires_key(self):
         written = {}

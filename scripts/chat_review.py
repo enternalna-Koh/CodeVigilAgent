@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+from pathlib import Path
 from typing import Optional, Tuple
 
 from scripts.repo_context import RepoContextError, collect_repo_context, format_repo_prompt
@@ -17,10 +17,12 @@ def run_local_review(
     offline: bool = True,
     max_diff: int = 12000,
     scenario: Optional[str] = None,
+    path: Optional[Path] = None,
+    client=None,
 ) -> Tuple[str, dict]:
     """Return (markdown_or_message, report_dict). report may be empty on soft failures."""
     try:
-        context = collect_repo_context(staged=staged, max_diff_chars=max_diff)
+        context = collect_repo_context(path=path or Path.cwd(), staged=staged, max_diff_chars=max_diff)
     except RepoContextError as exc:
         return f'无法收集仓库上下文: {exc}', {}
 
@@ -37,7 +39,14 @@ def run_local_review(
 
     prompt = format_repo_prompt(context)
     paths = context.get('changed_files') or []
-    specialist = resolve_specialist(prompt, paths=paths, explicit=scenario)
+    specialist = resolve_specialist(context['diff'], paths=paths, explicit=scenario)
+    if specialist.status in ('missing_agent', 'incomplete') or (scenario and specialist.status == 'needs_context'):
+        meta = specialist.as_dict()
+        meta['text_loaded'] = False
+        message = specialist.question or specialist.reason
+        return (f"专业审查未完成（{specialist.status}）: {message}\n"
+                '请补齐必要规则，或明确 operator|inference 场景后重试。',
+                {'needs_context': specialist.status == 'needs_context', 'specialist_context': meta})
     if specialist.status == 'ready':
         meta = specialist.as_dict()
         meta['text_loaded'] = bool(specialist.text)
@@ -48,7 +57,10 @@ def run_local_review(
         meta['text_loaded'] = False
         specialist_text = ''
 
-    reviewer = SmartReviewer(config_file or 'unused.json', verbose=False)
+    reviewer = SmartReviewer(config_file, verbose=False)
+    if client is not None and not offline:
+        reviewer.ai_client = client
+        reviewer.has_ai = True
     if offline:
         reviewer.has_ai = False
     report = reviewer.review(
@@ -59,25 +71,35 @@ def run_local_review(
         specialist_meta=meta,
     )
     result = report.get('review_result') or {}
-    md = _format_report(report, staged=staged, offline=offline, warn=warn)
+    report['fallback_reason'] = ('AI 未配置，已回退本地规则'
+                                 if not offline and report['engine'] == 'rules' else '')
+    md = _format_report(report, staged=staged, warn=warn)
     if result.get('error'):
         md = f"审查出错: {result.get('error')}\n\n" + md
     return md, report
 
 
-def _format_report(report: dict, *, staged: bool, offline: bool, warn: str) -> str:
+def _format_report(report: dict, *, staged: bool, warn: str) -> str:
     result = report.get('review_result') or {}
     issues = result.get('issues') or []
     lines = [
         '## 本地 Git 审查',
         '',
         f"- 范围: {'staged' if staged else '工作区已跟踪 diff'}",
-        f"- 模式: {'offline 规则+案例' if offline else 'AI'}",
+        f"- 模式: {'AI' if report.get('engine') == 'ai' else 'offline 规则+案例'}",
         f"- 问题数: {len(issues)}",
     ]
-    meta = result.get('specialist_meta') or report.get('specialist_meta') or {}
+    if report.get('fallback_reason'):
+        lines.append(f"- 回退: {report['fallback_reason']}")
+    meta = report.get('specialist_context') or {}
     if meta:
-        lines.append(f"- 专业路由: {meta.get('scenario') or meta.get('status') or '-'}")
+        lines.append(f"- 专业路由: {meta.get('scenario') or '-'} · {meta.get('status') or '-'}")
+        if meta.get('reason'):
+            lines.append(f"- 路由说明: {meta['reason']}")
+        if meta.get('omitted'):
+            lines.append('- 省略规则: ' + '; '.join(meta['omitted']))
+        if report.get('engine') == 'rules' and meta.get('text_loaded'):
+            lines.append('- 专业规则来源已记录；离线模式未由模型执行专业 Agent 正文')
     lines.append(warn.rstrip() if warn else '')
     lines.append('')
     if not issues:
