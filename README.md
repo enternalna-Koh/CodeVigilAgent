@@ -5,7 +5,7 @@
 仓库：[`enternalna-Koh/ReviewAgent`](https://github.com/enternalna-Koh/ReviewAgent)。
 
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ### Cursor 智能体
 
@@ -362,7 +362,7 @@ python review_cli.py config --set model=claude-3-opus-20240229
 
 ## 📝 许可
 
-本项目代码采用 [MIT License](LICENSE)。第三方依赖及收集的上游资料遵循各自许可证。
+MIT License
 
 ---
 

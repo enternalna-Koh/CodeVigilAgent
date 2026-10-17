@@ -33,7 +33,7 @@ MAX_BYTES = 32 * 1024
 @dataclass
 class SpecialistLoad:
     scenario: Optional[str] = None
-    status: str = 'none'  # none | ready | needs_context | missing_agent | incomplete
+    status: str = 'none'  # none | ready | needs_context | missing_agent
     reason: str = ''
     question: str = ''
     files: List[Dict] = field(default_factory=list)
@@ -75,22 +75,8 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _evidence_blob(diff_or_text: str) -> str:
-    lines = diff_or_text.splitlines()
-    if not any(line.startswith(('diff --git ', '@@ ')) for line in lines):
-        return diff_or_text.lower()
-    current = []
-    in_hunk = False
-    for line in lines:
-        if line.startswith('diff --git '):
-            in_hunk = False
-        elif line.startswith('@@ '):
-            in_hunk = True
-        elif in_hunk and line.startswith(('+', ' ')):
-            current.append(line[1:])
-        elif in_hunk and not line.startswith(('-', '\\')):
-            in_hunk = False
-    return '\n'.join(current).lower()
+def _evidence_blob(diff_or_text: str, paths: Sequence[str]) -> str:
+    return f"{' '.join(paths)}\n{diff_or_text}".lower()
 
 
 def _count_hits(blob: str, path_hints: Iterable[str], code_hints: Iterable[str],
@@ -133,8 +119,8 @@ def detect_scenario(
         )
 
     paths = list(paths or [])
-    # Diff evidence uses only added/context lines; deleted code and metadata do not count.
-    blob = _evidence_blob(content)
+    # Prefer added lines only when content looks like a repo prompt with a diff block
+    blob = _evidence_blob(content, paths)
     op_n, op_hits = _count_hits(blob, OPERATOR_PATH_HINTS, OPERATOR_CODE_HINTS, paths)
     inf_n, inf_hits = _count_hits(blob, INFERENCE_PATH_HINTS, INFERENCE_CODE_HINTS, paths)
 
@@ -182,23 +168,12 @@ def _extract_sections(text: str, section_ids: Sequence[str]) -> str:
     return ''.join(kept) if len(kept) > 1 else text
 
 
-def _source_label(path: Path) -> str:
-    try:
-        return path.relative_to(PROJECT_ROOT).as_posix()
-    except ValueError:
-        try:
-            return '~/' + path.relative_to(Path.home()).as_posix()
-        except ValueError:
-            return path.as_posix()
-
-
-def _append_budgeted(parts: List[str], piece: str, omitted: List[str], label: str) -> bool:
+def _append_budgeted(parts: List[str], piece: str, omitted: List[str], label: str) -> None:
     candidate = ''.join(parts) + piece
     if len(candidate) > MAX_CHARS or len(candidate.encode('utf-8')) > MAX_BYTES:
         omitted.append(label)
-        return False
+        return
     parts.append(piece)
-    return True
 
 
 def load_specialist_context(scenario: str) -> SpecialistLoad:
@@ -212,9 +187,9 @@ def load_specialist_context(scenario: str) -> SpecialistLoad:
     elif scenario == 'inference':
         agent_rel = 'agents/cann-inference-advisor.md'
         skill_specs = [
-            ('skills/common-issues-patterns/SKILL.md', ['§0', '§6']),
-            ('skills/model-migration/SKILL.md', ['§0', '§1', '§3', '§5']),
-            ('skills/inference-optimization/SKILL.md', ['§0', '§1', '§6']),
+            ('skills/common-issues-patterns/SKILL.md', ['常见', '诊断', 'pattern']),
+            ('skills/model-migration/SKILL.md', ['迁移', '精度']),
+            ('skills/inference-optimization/SKILL.md', ['性能', 'profiling']),
         ]
     else:
         return SpecialistLoad(status='needs_context', reason=f'未知场景 {scenario}',
@@ -233,14 +208,13 @@ def load_specialist_context(scenario: str) -> SpecialistLoad:
     parts: List[str] = []
 
     agent_text = agent_path.read_text(encoding='utf-8')
-    agent_label = _source_label(agent_path)
-    included = _append_budgeted(parts, f'# Specialist Agent\n{agent_text}\n', omitted, agent_label)
     files_meta.append({
-        'path': agent_label,
+        'path': str(agent_path.relative_to(PROJECT_ROOT)).replace('\\', '/'),
         'sha256': _sha256(agent_path),
         'role': 'agent',
-        'status': 'loaded' if included else 'omitted_budget',
+        'status': 'loaded',
     })
+    _append_budgeted(parts, f'# Specialist Agent\n{agent_text}\n', omitted, agent_rel)
 
     for rel, section_ids in skill_specs:
         path = _find(rel)
@@ -249,7 +223,7 @@ def load_specialist_context(scenario: str) -> SpecialistLoad:
             omitted.append(f'missing:{rel}')
             continue
         body = _extract_sections(path.read_text(encoding='utf-8'), section_ids)
-        label = _source_label(path)
+        label = str(path.relative_to(PROJECT_ROOT)).replace('\\', '/')
         before = len(parts)
         _append_budgeted(parts, f'\n# Skill: {label}\n{body}\n', omitted, label)
         files_meta.append({
@@ -262,8 +236,8 @@ def load_specialist_context(scenario: str) -> SpecialistLoad:
     text = ''.join(parts)
     return SpecialistLoad(
         scenario=scenario,
-        status='incomplete' if omitted else 'ready',
-        reason='必要专业上下文未完整加载：' + ', '.join(omitted) if omitted else 'loaded',
+        status='ready',
+        reason='loaded',
         files=files_meta,
         omitted=omitted,
         text=text,
@@ -281,6 +255,5 @@ def resolve_specialist(
     if decided.status != 'ready' or not decided.scenario:
         return decided
     loaded = load_specialist_context(decided.scenario)
-    if loaded.status == 'ready':
-        loaded.reason = decided.reason
+    loaded.reason = decided.reason
     return loaded

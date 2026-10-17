@@ -68,14 +68,12 @@ class InvestigationTests(unittest.TestCase):
         actions = [{'tool': 'web_search', 'query': f'query{i}'} for i in range(5)]
         searcher = Searcher()
         agent = ConversationAgent(Planner(actions), FakeKnowledge(), FakeFetcher(), searcher=searcher)
-        agent.set_chat_mode('work')
         agent.answer('查版本')
         self.assertEqual(len(searcher.queries), 3)
         self.assertEqual(agent.last_tools[-1]['tool'], 'budget')
         searcher = Searcher()
         action = {'tool': 'web_search', 'query': 'same'}
         agent = ConversationAgent(Planner([action, action]), FakeKnowledge(), FakeFetcher(), searcher=searcher)
-        agent.set_chat_mode('work')
         agent.answer('查版本')
         self.assertEqual(len(searcher.queries), 1)
 

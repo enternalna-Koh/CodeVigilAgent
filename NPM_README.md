@@ -217,7 +217,7 @@ review --help             显示帮助
 
 ## 📝 许可
 
-本项目代码采用 [MIT License](LICENSE)。第三方依赖及收集的上游资料遵循各自许可证。
+MIT License
 
 ---
 

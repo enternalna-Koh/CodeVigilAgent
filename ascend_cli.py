@@ -37,6 +37,16 @@ from scripts.model_catalog import (
     gateway_changed,
     resolve_model_request,
 )
+from scripts.session_store import (
+    apply_to_agent,
+    clean_sessions,
+    list_sessions,
+    load_session,
+    save_session,
+)
+from scripts.ci_log_analyzer import analyze_ci_log, format_ci_report
+from scripts.chat_review import run_local_review
+from scripts.context_compare import compare_contexts, format_compare_report
 
 
 def _default_config(cli_value: str = None) -> str:
@@ -64,24 +74,21 @@ def review(args: argparse.Namespace) -> int:
 
     prompt = format_repo_prompt(context)
     paths = context.get("changed_files") or []
-    specialist = resolve_specialist(context["diff"], paths=paths, explicit=getattr(args, "scenario", None))
+    specialist = resolve_specialist(prompt, paths=paths, explicit=getattr(args, "scenario", None))
     require_scenario = bool(getattr(args, "require_scenario", False) or getattr(args, "scenario", None))
     # 显式 --scenario 或 --require-scenario：含糊/缺失则停；默认自动判定失败时退回通用审查
-    if specialist.status in ("missing_agent", "incomplete") or (require_scenario and specialist.status == "needs_context"):
+    if specialist.status == "missing_agent" or (require_scenario and specialist.status == "needs_context"):
         payload = {
             "needs_context": specialist.status == "needs_context",
             "specialist_context": specialist.as_dict(),
-            "question": specialist.question or specialist.reason,
+            "question": specialist.question or "这是算子社区任务，还是推理部署？",
         }
         if args.json:
             print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:
             print(f"[NEED CONTEXT] {payload['question']}")
             print(f"  reason: {specialist.reason}")
-            if specialist.status == "needs_context":
-                print("  使用 --scenario operator|inference 明确场景后重试。")
-            else:
-                print("  请恢复必要规则文件或调整专业上下文预算后重试。")
+            print("  使用 --scenario operator|inference 明确场景后重试。")
         if args.output:
             Path(args.output).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return 2
@@ -334,7 +341,7 @@ def _slash_cmd(text: str):
     return parts[0].lower(), (parts[1] if len(parts) > 1 else '')
 
 
-def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, config_file=None) -> str:
+def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None) -> str:
     """Dispatch in-chat slash commands.
 
     Returns: 'exit' | 'handled' | 'pass' (not a known slash cmd / not a slash).
@@ -386,6 +393,182 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
         print(ok('已清除当前对话和 PR/Issue 上下文。'))
         return 'handled'
 
+    if cmd in ('/status', '/info'):
+        snap = agent.status_snapshot()
+        data = read_config(str(config_path())) or {}
+        env = load_config_from_env()
+        merged = merge_config(data, env)
+        labels = {'auto': '自动分流', 'chat': '日常(钉住)', 'work': '正式(钉住)'}
+        lane = '正式' if snap['session_lane'] == 'work' else '日常'
+        print(ok('会话状态'))
+        print(mute(f"  模式: {labels.get(snap['chat_mode'], snap['chat_mode'])} · 当前车道: {lane}"))
+        print(mute(f"  上轮: {snap['last_turn'] or '-'} · 联网: {snap['network']}"))
+        print(mute(f"  上下文: {snap['contexts']} · 对话轮次: {snap['history_turns']}"))
+        print(mute(f"  待应用补丁: {'有' if snap['pending_fix'] else '无'} · 最近工具: {snap['last_tools']}"))
+        print(mute(f"  模型: {merged.get('provider')}/{merged.get('model')}"))
+        print(mute(f"  工作区: {snap['work_root']}"))
+        print(mute('  命令: /history /export /retry /context /model /help'))
+        return 'handled'
+
+    if cmd in ('/history', '/hist'):
+        try:
+            n = int(arg.strip()) if arg.strip() else 6
+        except ValueError:
+            n = 6
+        n = max(1, min(n, 20))
+        print(ok(f'最近 {n} 轮对话'))
+        print(agent.format_history(limit=n))
+        return 'handled'
+
+    if cmd in ('/export', '/save'):
+        try:
+            path = agent.export_session(arg.strip() or None)
+            print(ok(f'已导出: {path}'))
+        except Exception as exc:
+            print(warn(f'导出失败: {exc}'))
+        return 'handled'
+
+    if cmd in ('/retry', '/again'):
+        if not agent.last_user_text:
+            print(warn('没有可重试的上一条用户消息。'))
+            return 'handled'
+        print(mute(f'重试: {agent.last_user_text[:120]}{"…" if len(agent.last_user_text) > 120 else ""}'))
+        begin_think('重试中')
+        interrupted = False
+        reply = ''
+        try:
+            reply = agent.answer(agent.last_user_text)
+        except KeyboardInterrupt:
+            interrupted = True
+        end_think('已中断' if interrupted else '回答就绪')
+        if interrupted:
+            print(ok('已取消重试。'))
+            return 'handled'
+        _print_agent_reply(reply)
+        return 'handled'
+
+    if cmd in ('/save', '/session-save'):
+        try:
+            path = save_session(agent, arg.strip() or None)
+            print(ok(f'会话已保存: {path}'))
+            print(mute('恢复: /resume  或  /resume <名字> · 列表: /sessions'))
+        except Exception as exc:
+            print(warn(f'保存失败: {exc}'))
+        return 'handled'
+
+    if cmd in ('/sessions', '/session-list'):
+        parts = arg.split()
+        if parts and parts[0] in ('clean', 'clear', 'prune'):
+            wipe = any(p in ('all', '--all') for p in parts[1:])
+            keep = 5
+            for p in parts[1:]:
+                if p.isdigit():
+                    keep = int(p)
+            result = clean_sessions(keep=0 if wipe else keep, wipe_all=wipe)
+            print(ok(
+                f"已清理会话：删除 {len(result['deleted'])}，保留 {len(result['kept'])}"
+                + ('（含 latest）' if wipe else f'（keep={result["keep"]}）')
+            ))
+            if result['deleted'][:8]:
+                print(mute('  删除: ' + ', '.join(result['deleted'][:8])))
+            return 'handled'
+        rows = list_sessions(12)
+        if not rows:
+            print(warn('还没有已保存会话。先 /save 或正常 /exit（会自动存 latest）。'))
+            return 'handled'
+        print(ok('最近会话'))
+        for row in rows:
+            print(mute(
+                f"  {row['name']}  turns={row['turns']} ctx={row['contexts']}  {row['saved_at']}"
+            ))
+        print(mute('恢复: /resume <名字> · 清理: /sessions clean [保留数] · /sessions clean all'))
+        return 'handled'
+
+    if cmd in ('/resume', '/load'):
+        try:
+            data = load_session(arg.strip() or None)
+            apply_to_agent(agent, data)
+            print(ok(f"已恢复会话: {data.get('_path')}"))
+            print(mute(
+                f"  mode={agent.chat_mode} lane={agent.session_lane} "
+                f"history={len(agent.history)//2} contexts={len(agent.contexts)}"
+            ))
+            if data.get('pending_fix'):
+                print(mute('  原待确认补丁未自动恢复，请重新 /fix。'))
+        except FileNotFoundError as exc:
+            print(warn(str(exc)))
+            print(mute('可先 /sessions 查看，或重新对话后 /save。'))
+        except Exception as exc:
+            print(warn(f'恢复失败: {exc}'))
+        return 'handled'
+
+    if cmd in ('/review', '/diff-review'):
+        parts = arg.split()
+        staged = any(p in ('staged', '--staged', '-s') for p in parts)
+        online = any(p in ('online', '--online', 'ai') for p in parts)
+        scenario = None
+        for p in parts:
+            if p in ('operator', 'inference'):
+                scenario = p
+        begin_think('本地 Git 审查')
+        try:
+            md, _report = run_local_review(
+                str(config_path()),
+                staged=staged,
+                offline=not online,
+                scenario=scenario,
+            )
+        finally:
+            end_think('审查完成')
+        agent.last_reply = md
+        agent.history.extend([
+            {'role': 'user', 'content': f'/review {arg}'.strip()},
+            {'role': 'assistant', 'content': md[:12000]},
+        ])
+        agent.history = agent.history[-8:]
+        _print_agent_reply(md)
+        return 'handled'
+
+    if cmd in ('/ci', '/cilog'):
+        blob = arg.strip()
+        if not blob:
+            blob = agent.last_user_text or ''
+        if len(blob) < 40:
+            print(warn('用法: 先粘贴 CI 失败日志发送，再输入 /ci；或 /ci <日志片段>'))
+            print(mute('也支持 /paste 贴长日志 → /send → /ci'))
+            return 'handled'
+        result = analyze_ci_log(blob)
+        md = format_ci_report(result)
+        agent.last_reply = md
+        agent.history.extend([
+            {'role': 'user', 'content': '/ci'},
+            {'role': 'assistant', 'content': md[:12000]},
+        ])
+        agent.history = agent.history[-8:]
+        _print_agent_reply(md)
+        return 'handled'
+
+    if cmd in ('/checklist', '/it'):
+        md = _acceptance_checklist(arg.strip())
+        agent.last_reply = md
+        _print_agent_reply(md)
+        return 'handled'
+
+    if cmd in ('/compare', '/diff-links', '/cmp'):
+        if len(agent.contexts) < 2:
+            print(warn('当前上下文不足 2 个。请一次发送多个 GitHub/GitCode 链接后再 /compare。'))
+            return 'handled'
+        result = compare_contexts(agent.contexts)
+        md = format_compare_report(result)
+        agent.last_reply = md
+        agent.history.extend([
+            {'role': 'user', 'content': '/compare'},
+            {'role': 'assistant', 'content': md[:12000]},
+        ])
+        agent.history = agent.history[-8:]
+        _print_agent_reply(md)
+        return 'handled'
+
     if cmd == '/context':
         if not agent.context_summary:
             print(warn('当前没有获取到的 PR/Issue。'))
@@ -427,10 +610,10 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
 
     if cmd == '/model':
         ensure_home()
-        path = str(config_file or config_path())
+        path = str(config_path())
         data = read_config(path) or {}
         env = load_config_from_env()
-        merged = agent.model_config or merge_config(data, env)
+        merged = merge_config(data, env)
         if not arg.strip():
             print(ok('当前模型'))
             print(mute(f"  provider: {merged.get('provider')}"))
@@ -476,15 +659,21 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
         elif not target.get('file_provider'):
             # custom model id on current gateway
             print(mute(target['message']))
+            data = apply_target_to_config(data, target)
+            write_config(data, path)
+            try:
+                if reload_client:
+                    reload_client()
+                print(ok(f"已切换 model={data['model']}（仍用当前 API）"))
+            except Exception as exc:
+                print(warn(f'已写入配置，但重载失败: {exc}'))
+            return 'handled'
 
-        data = apply_target_to_config(merged, target, api_key=new_key)
+        data = apply_target_to_config(data, target, api_key=new_key)
         write_config(data, path)
         try:
             if reload_client:
-                reload_client(data)
-            else:
-                agent.client = get_ai_client(path, overrides=data)
-            agent.model_config = data
+                reload_client()
             print(ok(
                 f"已切换 provider={data.get('provider')} model={data.get('model')}"
                 + (f" base_url={data.get('base_url')}" if data.get('base_url') else '')
@@ -512,7 +701,14 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
         print(mute('   /model  ·  /model MiniMax-M1  ·  reviewagent config --wizard'))
         print(ok('4) 改补丁'))
         print(mute('   /fix → y 或 /apply（不自动 push）'))
-        print(mute('退出: exit / /exit / Ctrl+C'))
+        print(ok('5) 实用命令'))
+        print(mute('   /status /history /retry /export'))
+        print(mute('   /review [staged] [online] [operator|inference]  本地 Git 审查'))
+        print(mute('   /ci       解析上一条或参数中的 CI 失败日志'))
+        print(mute('   /checklist [标题]  社区任务验收清单'))
+        print(mute('   /compare  多 PR/Issue 对比表（需先贴 ≥2 个链接）'))
+        print(mute('   /save /resume /sessions · /sessions clean [N|all]'))
+        print(mute('退出: exit / /exit / Ctrl+C（自动存会话）'))
         print(mute('/discard /context /sources /clear · /network auto|on|off'))
         return 'handled'
 
@@ -555,17 +751,17 @@ def chat(args: argparse.Namespace) -> int:
         progress=_on_progress,
     )
 
-    def _reload_client(overrides=None):
+    def _reload_client():
         nonlocal client, agent
-        client = get_ai_client(_default_config(args.config), overrides=overrides)
+        client = get_ai_client(_default_config(args.config))
         agent.client = client
 
     if not args.message:
         if quiet:
-            print(mute('  默认自动切换：贴任务/链接→正式 · 好的/闲聊→日常 · 怎么改→继续正式'))
-            print(mute('  粘贴多行后 Enter 发送 · 可选钉住: /chat /work · /mode auto'))
-            print(mute('  Win: Shift+Enter换行 · exit/Ctrl+C · /model · /paste'))
-            print(mute('  命令: /help /mode /model /fix /apply /clear'))
+            print(mute('  /review 审diff · /ci 日志 · /compare 多链接 · /checklist 验收'))
+            print(mute('  /save /resume · /sessions clean · exit 自动存会话'))
+            print(mute('  Win: Shift+Enter换行 · /model · /paste'))
+            print(mute('  命令: /help /compare /review /ci /resume /model'))
         else:
             print(brand('ReviewAgent · Ascend AI Infra'))
             print(mute(f'config: {_default_config(args.config)}'))
@@ -591,15 +787,17 @@ def chat(args: argparse.Namespace) -> int:
             )
         except KeyboardInterrupt:
             print('\n' + ok('已退出对话。'))
+            _autosave_session(agent)
             return 0
         except EOFError:
             print()
+            _autosave_session(agent)
             return 0
         if not text:
             continue
-        action = handle_chat_slash(text, agent, reload_client=_reload_client,
-                                  config_file=_default_config(args.config))
+        action = handle_chat_slash(text, agent, reload_client=_reload_client)
         if action == 'exit':
+            _autosave_session(agent)
             return 0
         if action == 'handled':
             continue
@@ -613,6 +811,7 @@ def chat(args: argparse.Namespace) -> int:
         end_think('已中断' if interrupted else '回答就绪')
         if interrupted:
             print('\n' + ok('已退出对话。'))
+            _autosave_session(agent)
             return 0
         _print_agent_reply(reply)
 
@@ -622,12 +821,53 @@ def _print_agent_reply(reply: str) -> None:
     print_markdown_box(reply or '', title='Agent')
 
 
+def _autosave_session(agent: ConversationAgent) -> None:
+    try:
+        path = save_session(agent)
+        print(mute(f'会话已自动保存（/resume 可恢复）: {path.name}'))
+    except Exception:
+        pass
+
+
+def _acceptance_checklist(focus: str = '') -> str:
+    """Community-task style acceptance checklist (ops / design / IT)."""
+    title = focus or '社区任务'
+    return f'''## 验收清单 · {title}
+
+### A. 认领与文档
+- [ ] 任务页/Issue 已认领，范围与芯片型号写清
+- [ ] `design.md`：接口、dtype、shape、边界、性能预期
+- [ ] 架构 skip 账本（若某芯片不支持）已登记
+
+### B. 实现
+- [ ] Host / Kernel（或 Basic API）路径完整
+- [ ] 错误码与参数校验齐全
+- [ ] 无危险未定义行为（越界、未初始化、缺 sync）
+
+### C. 精度与性能
+- [ ] 精度门禁通过（对照 golden / rtol·atol）
+- [ ] 性能相对基线达标或有合理解释
+- [ ] 关键 shape / dtype 回归集
+
+### D. CI / Codecheck / IT
+- [ ] Codecheck 清零
+- [ ] 流水线红灯已定位（可用 `/ci` 解析日志）
+- [ ] IT 五件套材料齐：设计、代码、精度、性能、自测说明
+
+### E. 合入
+- [ ] MR 描述含复现与验证命令
+- [ ] 不自动 push；本地 `/fix`→`/apply` 后人工提交
+
+快捷：`/review` 审本地 diff · `/ci` 析 CI 日志 · `/export` 导出会话
+'''
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="reviewagent",
         description="ReviewAgent — Ascend AI Infra 智能体（Hermes 风格唤醒）",
     )
-    parser.add_argument("--version", action="version", version="ReviewAgent 1.5.0")
+    parser.add_argument("--version", action="version", version="ReviewAgent 1.6.2")
     subparsers = parser.add_subparsers(dest="command")
 
     review_parser = subparsers.add_parser("review", help="审查当前 Git 工作区")

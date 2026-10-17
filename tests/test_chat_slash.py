@@ -187,6 +187,62 @@ class SlashDispatchTests(unittest.TestCase):
         r, out = self._run('你好')
         self.assertEqual(r, 'pass')
 
+    def test_status_history_export_retry(self):
+        self.agent.history = [
+            {'role': 'user', 'content': 'hello'},
+            {'role': 'assistant', 'content': 'hi there'},
+        ]
+        self.agent.last_user_text = 'hello'
+        with patch('ascend_cli.read_config', return_value={'provider': 'x', 'model': 'm'}), \
+                patch('ascend_cli.load_config_from_env', return_value={}), \
+                patch('ascend_cli.merge_config', side_effect=lambda a, b: {**a, **b}), \
+                patch('ascend_cli.config_path', return_value='C:/tmp/ai_config.json'):
+            r, out = self._run('/status')
+        self.assertEqual(r, 'handled')
+        self.assertIn('会话状态', out)
+
+        r, out = self._run('/history')
+        self.assertEqual(r, 'handled')
+        self.assertIn('[你]', out)
+
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as td:
+            target = str(Path(td) / 'out.md')
+            r, out = self._run(f'/export {target}')
+            self.assertEqual(r, 'handled')
+            self.assertTrue(Path(target).is_file())
+            body = Path(target).read_text(encoding='utf-8')
+            self.assertIn('hello', body)
+
+        with patch.object(self.agent, 'answer', return_value='retried') as ans, \
+                patch('ascend_cli.begin_think'), patch('ascend_cli.end_think'), \
+                patch('ascend_cli._print_agent_reply'):
+            r, out = self._run('/retry')
+        self.assertEqual(r, 'handled')
+        ans.assert_called_once_with('hello')
+
+    def test_ci_and_checklist_and_review_commands(self):
+        self.agent.last_user_text = 'ERROR: Codecheck failed\nHCCL 507049 boom\n' + ('x' * 40)
+        with patch('ascend_cli._print_agent_reply') as printer:
+            r, out = self._run('/ci')
+        self.assertEqual(r, 'handled')
+        printer.assert_called()
+        self.assertIn('CI', printer.call_args[0][0])
+
+        with patch('ascend_cli._print_agent_reply') as printer:
+            r, out = self._run('/checklist demo')
+        self.assertEqual(r, 'handled')
+        self.assertIn('验收清单', printer.call_args[0][0])
+
+        with patch('ascend_cli.begin_think'), patch('ascend_cli.end_think'), \
+                patch('ascend_cli.run_local_review', return_value=('## ok', {})), \
+                patch('ascend_cli._print_agent_reply') as printer, \
+                patch('ascend_cli.config_path', return_value='C:/tmp/x.json'):
+            r, out = self._run('/review staged')
+        self.assertEqual(r, 'handled')
+        printer.assert_called_once()
+
 
 if __name__ == '__main__':
     unittest.main()

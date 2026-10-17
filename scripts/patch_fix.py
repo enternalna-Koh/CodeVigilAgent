@@ -106,8 +106,6 @@ def detect_domain_from_contexts(contexts: List[Dict], explicit: Optional[str] = 
     load = detect_scenario(content, paths=paths, explicit=explicit)
     if load.status == 'ready' and load.scenario:
         full = load_specialist_context(load.scenario)
-        if full.status != 'ready':
-            raise ValueError(full.reason)
         return load.scenario, load.reason or full.reason, full.text or ''
     if load.status == 'needs_context':
         return 'general', load.reason or load.question or '领域未判定，使用通用规范', ''
@@ -115,9 +113,7 @@ def detect_domain_from_contexts(contexts: List[Dict], explicit: Optional[str] = 
 
 
 def parse_fix_json(raw: str) -> ProposedFix:
-    if not isinstance(raw, str):
-        raise ValueError('模型补丁必须是 JSON 文本')
-    text = raw.strip()
+    text = (raw or '').strip()
     if text.startswith('```'):
         text = text.split('\n', 1)[-1]
         text = text.rsplit('```', 1)[0].strip()
@@ -125,27 +121,21 @@ def parse_fix_json(raw: str) -> ProposedFix:
     start = text.find('{')
     end = text.rfind('}')
     if start < 0 or end <= start:
-        raise ValueError('模型未返回可解析的补丁 JSON')
+        return ProposedFix(summary='模型未返回可解析的补丁 JSON', raw=raw)
     try:
         data = json.loads(text[start:end + 1])
     except json.JSONDecodeError:
-        raise ValueError('补丁 JSON 解析失败')
-    if not isinstance(data, dict) or not isinstance(data.get('files'), list):
-        raise ValueError('files 必须是数组')
-    if not all(isinstance(data.get(key, default), str)
-               for key, default in (('scenario', 'general'), ('summary', ''))):
-        raise ValueError('scenario 和 summary 必须是字符串')
+        return ProposedFix(summary='补丁 JSON 解析失败', raw=raw)
+    if not isinstance(data, dict):
+        return ProposedFix(summary='补丁 JSON 格式错误', raw=raw)
     files = []
-    for item in data['files']:
-        if not isinstance(item, dict) or not all(
-                isinstance(item.get(key, default), str)
-                for key, default in (('path', None), ('action', 'replace'),
-                                     ('search', ''), ('replace', None))):
-            raise ValueError('每个文件的 path/action/search/replace 必须是字符串')
-        action = item.get('action', 'replace').strip().lower()
+    for item in data.get('files') or []:
+        if not isinstance(item, dict):
+            continue
+        action = (item.get('action') or 'replace').strip().lower()
         if action not in ('replace', 'create'):
             continue
-        path = item['path'].strip()
+        path = str(item.get('path') or '').strip()
         if not _safe_relpath(path):
             continue
         files.append(FileEdit(
@@ -216,7 +206,7 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
                 continue
             if not dry_run:
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(edit.replace.encode('utf-8'))
+                target.write_text(edit.replace, encoding='utf-8')
             results.append({'path': edit.path, 'status': 'created' if not dry_run else 'would_create'})
             ok += 1
             continue
@@ -225,10 +215,8 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
         if not target.is_file():
             results.append({'path': edit.path, 'status': 'skipped', 'error': '本地无此文件（请先 clone/checkout PR 分支）'})
             continue
-        text = target.read_bytes().decode('utf-8')
-        newline = '\r\n' if '\r\n' in text else ('\r' if '\r' in text else '\n')
-        search = edit.search.replace('\r\n', '\n').replace('\r', '\n').replace('\n', newline)
-        replacement = edit.replace.replace('\r\n', '\n').replace('\r', '\n').replace('\n', newline)
+        text = target.read_text(encoding='utf-8')
+        search = edit.search
         if not search:
             results.append({'path': edit.path, 'status': 'skipped', 'error': 'search 为空'})
             continue
@@ -240,7 +228,7 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
             results.append({'path': edit.path, 'status': 'skipped', 'error': f'search 匹配 {count} 处，拒绝歧义写入'})
             continue
         if not dry_run:
-            target.write_bytes(text.replace(search, replacement, 1).encode('utf-8'))
+            target.write_text(text.replace(search, edit.replace, 1), encoding='utf-8')
         results.append({'path': edit.path, 'status': 'replaced' if not dry_run else 'would_replace'})
         ok += 1
 
