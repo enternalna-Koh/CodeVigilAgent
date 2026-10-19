@@ -45,7 +45,7 @@ def run_local_review(
         meta['text_loaded'] = False
         message = specialist.question or specialist.reason
         return (f"专业审查未完成（{specialist.status}）: {message}\n"
-                '请补齐必要规则，或明确 operator|inference 场景后重试。',
+                '请补齐必要规则，或明确 operator|inference|opengauss 场景后重试。',
                 {'needs_context': specialist.status == 'needs_context', 'specialist_context': meta})
     if specialist.status == 'ready':
         meta = specialist.as_dict()

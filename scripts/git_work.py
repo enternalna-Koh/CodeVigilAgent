@@ -137,20 +137,22 @@ def create_branch(name: str, cwd: Optional[str] = None, checkout: bool = True) -
     if not ok:
         return msg
     name = (name or '').strip()
-    if not re.match(r'^[A-Za-z0-9._/\-]+$', name):
-        return '分支名不合法。仅允许字母数字 . _ / -'
+    valid = run_git(['check-ref-format', '--branch', name], cwd=cwd)
+    if not name or not valid['ok']:
+        return '分支名不合法，请使用有效的 Git 分支名（不能以 - 开头）。'
     if checkout:
         r = run_git(['checkout', '-b', name], cwd=cwd)
     else:
         r = run_git(['branch', name], cwd=cwd)
     if r['ok']:
         return f"已创建并切换到分支 `{name}`。" if checkout else f"已创建分支 `{name}`。"
-    # already exists → try switch
-    if checkout:
-        sw = run_git(['checkout', name], cwd=cwd)
+    # Only switch an existing local branch; checkout also accepts flags and file paths.
+    exists = run_git(['show-ref', '--verify', '--quiet', f'refs/heads/{name}'], cwd=cwd)
+    if checkout and exists['ok']:
+        sw = run_git(['checkout', name, '--'], cwd=cwd)
         if sw['ok']:
             return f"分支已存在，已切换到 `{name}`。"
-        return f"失败: {r['out'] or sw['out']}"
+        return f"失败: {sw['out'] or r['out']}"
     return f"失败: {r['out']}"
 
 
@@ -245,11 +247,9 @@ def to_ssh_origin(cwd: Optional[str] = None) -> str:
 
 def https_to_ssh(url: str) -> Optional[str]:
     u = (url or '').strip()
-    m = re.match(r'https://github\.com/([^/]+)/([^/.]+)(?:\.git)?/?$', u)
+    m = re.fullmatch(r'https://github\.com/([A-Za-z0-9-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?', u)
     if m:
         return f'git@github.com:{m.group(1)}/{m.group(2)}.git'
-    m = re.match(r'https://([^/]+)/([^/]+)/([^/.]+)(?:\.git)?/?$', u)
-    # generic forge: only auto-convert github.com
     return None
 
 
@@ -325,7 +325,7 @@ def suggest_commit_message(agent=None) -> str:
     if agent is not None and getattr(agent, 'last_user_text', None):
         t = agent.last_user_text.strip().splitlines()[0]
         return t[:72]
-    last = run_git(['log', '-1', '--pretty=%s'])
+    last = run_git(['log', '-1', '--pretty=%s'], cwd=getattr(agent, 'work_root', None))
     return (last['out'] or 'Update').strip()[:72]
 
 

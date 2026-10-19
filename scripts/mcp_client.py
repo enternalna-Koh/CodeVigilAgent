@@ -5,8 +5,10 @@ matching Ascend agent-skills docs/doc-mcp/README.md.
 """
 from __future__ import annotations
 
+import atexit
 import json
 import os
+import queue
 import shutil
 import subprocess
 import threading
@@ -50,13 +52,17 @@ class McpServerConfig:
 def _parse_servers_block(raw: Dict) -> Dict[str, Dict]:
     if not isinstance(raw, dict):
         return {}
-    return raw.get('mcpServers') or raw.get('mcp') or raw.get('servers') or {}
+    block = raw.get('mcpServers') or raw.get('mcp') or raw.get('servers') or {}
+    return block if isinstance(block, dict) else {}
 
 
 def _load_json_file(path: Path) -> Dict:
     if not path.is_file():
         return {}
-    text = path.read_text(encoding='utf-8')
+    try:
+        text = path.read_text(encoding='utf-8')
+    except (OSError, UnicodeError):
+        return {}
     # Allow JSONC-ish line comments
     lines = []
     for line in text.splitlines():
@@ -98,14 +104,14 @@ def load_mcp_config(extra: Optional[Dict] = None) -> Dict[str, McpServerConfig]:
     for name, cfg in merged.items():
         command = cfg.get('command')
         args = cfg.get('args') or []
+        if not isinstance(args, list):
+            args = [str(args)]
         # OpenCode-style: command as list
         if isinstance(command, list) and command:
             args = list(command[1:]) + list(args)
             command = command[0]
         if not command:
             continue
-        if not isinstance(args, list):
-            args = [str(args)]
         env = cfg.get('env') if isinstance(cfg.get('env'), dict) else {}
         out[name] = McpServerConfig(
             name=name,
@@ -138,7 +144,7 @@ def ensure_default_user_mcp() -> Path:
 
 
 class McpSession:
-    """One stdio MCP server process (JSON-RPC 2.0, Content-Length framing preferred)."""
+    """One stdio MCP server process using newline-delimited JSON-RPC 2.0."""
 
     def __init__(self, config: McpServerConfig):
         self.config = config
@@ -146,17 +152,24 @@ class McpSession:
         self._id = 0
         self._lock = threading.Lock()
         self._reader_buf = b''
+        self._stdout_queue = queue.Queue(maxsize=64)
+        self._reader_stop = threading.Event()
+        self._reader_threads = []
+        self._stderr_tail = bytearray()
         self.tools: List[Dict] = []
         self.last_error: Optional[str] = None
 
     def start(self, timeout: float = 45.0) -> bool:
+        self.close()
+        deadline = time.monotonic() + timeout
         if self.config.disabled:
             self.last_error = 'server disabled'
             return False
-        cmd = [self.config.command, *self.config.args]
-        if self.config.command == 'npx' and not shutil.which('npx'):
+        executable = shutil.which(self.config.command)
+        if self.config.command == 'npx' and not executable:
             self.last_error = '未找到 npx（需 Node.js ≥ 22 以运行 ascend-doc-mcp）'
             return False
+        cmd = [executable or self.config.command, *self.config.args]
         env = os.environ.copy()
         env.update(self.config.env)
         try:
@@ -168,18 +181,24 @@ class McpSession:
                 env=env,
                 bufsize=0,
             )
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             self.last_error = f'启动失败: {exc}'
             return False
+        self._reader_buf = b''
+        self.tools = []
+        self._stdout_queue = queue.Queue(maxsize=64)
+        self._reader_stop = threading.Event()
+        self._stderr_tail = bytearray()
+        self._start_readers()
         try:
             self._request('initialize', {
                 'protocolVersion': '2024-11-05',
                 'capabilities': {},
                 'clientInfo': {'name': 'reviewagent', 'version': '1.8.0'},
-            }, timeout=timeout)
+            }, timeout=max(0, deadline - time.monotonic()))
             # notifications/initialized (no id)
             self._notify('notifications/initialized', {})
-            listed = self._request('tools/list', {}, timeout=timeout)
+            listed = self._request('tools/list', {}, timeout=max(0, deadline - time.monotonic()))
             tools = (listed or {}).get('tools') if isinstance(listed, dict) else None
             self.tools = tools if isinstance(tools, list) else []
             self.last_error = None
@@ -190,7 +209,8 @@ class McpSession:
             return False
 
     def close(self) -> None:
-        self._stdout_alive = False
+        self._reader_stop.set()
+        self.tools = []
         if self.proc is None:
             return
         try:
@@ -206,6 +226,7 @@ class McpSession:
                 except Exception:
                     try:
                         self.proc.kill()
+                        self.proc.wait(timeout=3)
                     except Exception:
                         pass
             for stream in (self.proc.stdout, self.proc.stderr):
@@ -216,6 +237,9 @@ class McpSession:
                         pass
         finally:
             self.proc = None
+            for thread in self._reader_threads:
+                thread.join(timeout=0.2)
+            self._reader_threads = []
 
     def call_tool(self, name: str, arguments: Optional[Dict] = None,
                   timeout: float = 60.0) -> Dict[str, Any]:
@@ -226,7 +250,13 @@ class McpSession:
                 'name': name,
                 'arguments': arguments or {},
             }, timeout=timeout)
+            if isinstance(result, dict) and result.get('isError'):
+                return {'error': 'MCP 工具执行失败', 'result': result}
             return {'ok': True, 'result': result}
+        except (TimeoutError, ValueError, OSError) as exc:
+            self.last_error = str(exc)
+            self.close()
+            return {'error': self.last_error}
         except Exception as exc:
             return {'error': str(exc)}
 
@@ -243,10 +273,19 @@ class McpSession:
             req_id = self._next_id()
             msg = {'jsonrpc': '2.0', 'id': req_id, 'method': method, 'params': params}
             self._write(msg)
-            deadline = time.time() + timeout
-            while time.time() < deadline:
-                resp = self._read_message(timeout=max(0.1, deadline - time.time()))
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                resp = self._read_message(timeout=max(0, deadline - time.monotonic()))
                 if resp is None:
+                    continue
+                if 'method' in resp:
+                    if 'id' in resp:
+                        reply = {'jsonrpc': '2.0', 'id': resp['id']}
+                        if resp['method'] == 'ping':
+                            reply['result'] = {}
+                        else:
+                            reply['error'] = {'code': -32601, 'message': 'Method not supported'}
+                        self._write(reply)
                     continue
                 if resp.get('id') != req_id:
                     # ignore unrelated notifications
@@ -261,96 +300,70 @@ class McpSession:
         if not self.proc or not self.proc.stdin:
             raise RuntimeError('MCP stdin 不可用')
         body = json.dumps(msg, ensure_ascii=False).encode('utf-8')
-        header = f'Content-Length: {len(body)}\r\n\r\n'.encode('ascii')
-        self.proc.stdin.write(header + body)
+        self.proc.stdin.write(body + b'\n')
         self.proc.stdin.flush()
+
+    def _start_readers(self) -> None:
+        stop, output, stderr_tail = self._reader_stop, self._stdout_queue, self._stderr_tail
+
+        def read_stream(stream, is_stdout):
+            try:
+                while not stop.is_set():
+                    chunk = stream.read(4096)
+                    if not chunk:
+                        break
+                    if is_stdout:
+                        while not stop.is_set():
+                            try:
+                                output.put(chunk, timeout=0.1)
+                                break
+                            except queue.Full:
+                                pass
+                    else:
+                        stderr_tail.extend(chunk)
+                        del stderr_tail[:-500]
+            except (OSError, ValueError):
+                pass
+            finally:
+                if is_stdout and not stop.is_set():
+                    while not stop.is_set():
+                        try:
+                            output.put(None, timeout=0.1)
+                            break
+                        except queue.Full:
+                            pass
+
+        self._reader_threads = [
+            threading.Thread(target=read_stream, args=(stream, is_stdout), daemon=True)
+            for stream, is_stdout in ((self.proc.stdout, True), (self.proc.stderr, False))
+        ]
+        for thread in self._reader_threads:
+            thread.start()
 
     def _read_message(self, timeout: float = 5.0) -> Optional[Dict]:
         if not self.proc or not self.proc.stdout:
             return None
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            # Try Content-Length framing first
-            if b'\r\n\r\n' in self._reader_buf or b'\n\n' in self._reader_buf:
-                sep = b'\r\n\r\n' if b'\r\n\r\n' in self._reader_buf else b'\n\n'
-                header, rest = self._reader_buf.split(sep, 1)
-                length = None
-                for line in header.decode('ascii', errors='ignore').splitlines():
-                    if line.lower().startswith('content-length:'):
-                        try:
-                            length = int(line.split(':', 1)[1].strip())
-                        except ValueError:
-                            length = None
-                if length is not None:
-                    if len(rest) < length:
-                        self._reader_buf = header + sep + rest
-                    else:
-                        body, self._reader_buf = rest[:length], rest[length:]
-                        return json.loads(body.decode('utf-8'))
-            # Fallback: newline-delimited JSON
-            if b'\n' in self._reader_buf and b'Content-Length' not in self._reader_buf.split(b'\n', 1)[0]:
+        deadline = time.monotonic() + timeout
+        while True:
+            if b'\n' in self._reader_buf:
                 line, self._reader_buf = self._reader_buf.split(b'\n', 1)
-                line = line.strip()
-                if line.startswith(b'{'):
-                    try:
-                        return json.loads(line.decode('utf-8'))
-                    except json.JSONDecodeError:
-                        pass
-            chunk = self._read_available()
-            if chunk:
-                self._reader_buf += chunk
-            else:
-                time.sleep(0.05)
-                if self.proc.poll() is not None:
-                    err = ''
-                    if self.proc.stderr:
-                        try:
-                            err = self.proc.stderr.read().decode('utf-8', errors='replace')[:500]
-                        except Exception:
-                            pass
-                    raise RuntimeError(f'MCP 进程退出 code={self.proc.returncode} {err}')
-        return None
-
-    def _read_available(self) -> bytes:
-        """Non-blocking-ish read of stdout."""
-        assert self.proc and self.proc.stdout
-        import select
-        try:
-            if os.name == 'nt':
-                # Windows: short blocking read via peek-less small reads
-                # Use a worker with timeout via communicating buffer growth
-                if not hasattr(self, '_stdout_thread'):
-                    self._q: List[bytes] = []
-                    self._stdout_alive = True
-
-                    def _pump():
-                        while self._stdout_alive and self.proc and self.proc.stdout:
-                            try:
-                                data = self.proc.stdout.read(1)
-                            except Exception:
-                                break
-                            if not data:
-                                break
-                            self._q.append(data)
-
-                    self._stdout_thread = threading.Thread(target=_pump, daemon=True)
-                    self._stdout_thread.start()
-                if self._q:
-                    data = b''.join(self._q)
-                    self._q.clear()
-                    # read a bit more greedily
-                    time.sleep(0.01)
-                    if self._q:
-                        data += b''.join(self._q)
-                        self._q.clear()
-                    return data
-                return b''
-            r, _, _ = select.select([self.proc.stdout], [], [], 0.05)
-            if not r:
-                return b''
-            return self.proc.stdout.read(4096) or b''
-        except Exception:
-            return b''
+                message = json.loads(line.decode('utf-8'))
+                if not isinstance(message, dict):
+                    raise ValueError('MCP 消息必须是 JSON 对象')
+                return message
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            try:
+                chunk = self._stdout_queue.get(timeout=remaining)
+            except queue.Empty:
+                return None
+            if chunk is None:
+                error = self._stderr_tail.decode('utf-8', errors='replace')
+                raise RuntimeError(f'MCP 进程退出 code={self.proc.poll()} {error}')
+            self._reader_buf += chunk
+            if len(self._reader_buf) > 4 * 1024 * 1024:
+                raise ValueError('MCP 单条消息超过 4 MiB 限制')
 
 
 class McpRegistry:
@@ -361,10 +374,13 @@ class McpRegistry:
         self._sessions: Dict[str, McpSession] = {}
 
     def reload(self) -> None:
+        self.close()
+        self.configs = load_mcp_config()
+
+    def close(self) -> None:
         for s in self._sessions.values():
             s.close()
         self._sessions.clear()
-        self.configs = load_mcp_config()
 
     def list_servers(self) -> List[Dict]:
         return [c.as_dict() for c in self.configs.values()]
@@ -378,6 +394,8 @@ class McpRegistry:
             return sess
         if not start:
             return None
+        if sess:
+            sess.close()
         sess = McpSession(cfg)
         if sess.start():
             self._sessions[name] = sess
@@ -393,7 +411,7 @@ class McpRegistry:
         return {
             'server': name,
             'tools': [
-                {'name': t.get('name'), 'description': (t.get('description') or '')[:200]}
+                {'name': t.get('name'), 'description': str(t.get('description') or '')[:200]}
                 for t in sess.tools if isinstance(t, dict)
             ],
         }
@@ -415,4 +433,5 @@ def get_registry() -> McpRegistry:
     if _REGISTRY is None:
         ensure_default_user_mcp()
         _REGISTRY = McpRegistry()
+        atexit.register(_REGISTRY.close)
     return _REGISTRY

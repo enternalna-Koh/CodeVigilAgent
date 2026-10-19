@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.error
 import urllib.request
+from urllib.parse import quote, urlparse
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -81,9 +83,12 @@ def _frontmatter_desc(text: str) -> str:
     block = text[3:end]
     for line in block.splitlines():
         if line.strip().lower().startswith('description:'):
-            return line.split(':', 1)[1].strip().strip('"\'')
+            value = line.split(':', 1)[1].strip().strip('"\'')
+            if value and value not in ('>', '|'):
+                return value
+            break
     # multiline description after description: >
-    m = re.search(r'^description:\s*[>|]?\s*\n((?:  .*\n)+)', block, re.M)
+    m = re.search(r'^description:[ \t]*[>|]?[ \t]*\n((?:[ \t]{2,}[^\n]*(?:\n|$))+)', block, re.M)
     if m:
         return ' '.join(ln.strip() for ln in m.group(1).splitlines() if ln.strip())[:200]
     return ''
@@ -105,7 +110,7 @@ def list_skills() -> List[SkillInfo]:
             seen.add(name)
             try:
                 text = skill_md.read_text(encoding='utf-8')
-            except OSError:
+            except (OSError, UnicodeError):
                 text = ''
             out.append(SkillInfo(
                 name=name,
@@ -131,17 +136,30 @@ def load_skill(name: str, sections: Optional[Sequence[str]] = None,
     info = find_skill(name)
     if not info:
         return SkillLoad(name=name, status='missing')
-    text = info.path.read_text(encoding='utf-8')
+    try:
+        text = info.path.read_text(encoding='utf-8')
+    except (OSError, UnicodeError) as exc:
+        return SkillLoad(name=info.name, status='incomplete', path=str(info.path),
+                         omitted=[f'无法读取 skill: {exc}'])
     if sections:
         text = _extract_sections(text, list(sections))
     omitted: List[str] = []
+    if not text.strip():
+        omitted.append('SKILL.md 为空')
     if len(text) > max_chars or len(text.encode('utf-8')) > max_bytes:
-        # Prefer head + 红线 sections rather than mid-cut a rule
-        keep = text[: max(0, max_chars - 80)]
-        while len(keep.encode('utf-8')) > max_bytes and keep:
-            keep = keep[:-200]
+        marker = '\n\n…[skill truncated by budget]…\n'
+        marker = marker[:max(0, max_chars)].encode('utf-8')[:max(0, max_bytes)].decode('utf-8', 'ignore')
+        keep = text[:max(0, max_chars - len(marker))]
+        keep = keep.encode('utf-8')[:max(0, max_bytes - len(marker.encode('utf-8')))].decode('utf-8', 'ignore')
         omitted.append('budget_truncated')
-        text = keep + '\n\n…[skill truncated by budget]…\n'
+        text = keep + marker
+    meta_path = info.path.parent / 'install.json'
+    if meta_path.is_file():
+        try:
+            meta = json.loads(meta_path.read_text(encoding='utf-8'))
+            omitted.extend(meta.get('omitted') or [])
+        except (OSError, ValueError, AttributeError):
+            omitted.append('无法读取安装元数据')
     return SkillLoad(
         name=info.name,
         status='incomplete' if omitted else 'ready',
@@ -157,18 +175,19 @@ def _http_get_json(url: str, token: Optional[str] = None) -> Dict:
     if token:
         headers['Authorization'] = f'Bearer {token}'
         headers['PRIVATE-TOKEN'] = token
-        sep = '&' if '?' in url else '?'
-        url = f'{url}{sep}access_token={token}'
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode('utf-8'))
+        payload = resp.read(4 * 1024 * 1024 + 1)
+        if len(payload) > 4 * 1024 * 1024:
+            raise RuntimeError('GitCode 响应超过 4 MB 限制')
+        return json.loads(payload.decode('utf-8'))
 
 
 def _download_blob_text(owner_repo: str, path: str, token: Optional[str] = None) -> str:
     """Fetch file content via GitCode contents API (base64 or download_url)."""
     import base64
     owner, repo = owner_repo.split('/', 1)
-    api = f'{GITCODE_API}/repos/{owner}/{repo}/contents/{path}'
+    api = f'{GITCODE_API}/repos/{owner}/{repo}/contents/{quote(path, safe="/")}'
     data = _http_get_json(api, token=token)
     if isinstance(data, list):
         raise FileNotFoundError(f'{path} 是目录而非文件')
@@ -178,20 +197,32 @@ def _download_blob_text(owner_repo: str, path: str, token: Optional[str] = None)
         return base64.b64decode(data['content']).decode('utf-8')
     download = data.get('download_url')
     if download:
+        if not isinstance(download, str):
+            raise RuntimeError('GitCode download_url 格式异常')
+        parsed = urlparse(download)
+        if parsed.scheme != 'https' or not (
+            parsed.hostname == 'gitcode.com' or (parsed.hostname or '').endswith('.gitcode.com')
+        ):
+            raise RuntimeError('拒绝非 GitCode HTTPS 下载地址')
         req = urllib.request.Request(download, headers={'User-Agent': 'ReviewAgent/1.8'})
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.read().decode('utf-8')
+            payload = resp.read(4 * 1024 * 1024 + 1)
+            if len(payload) > 4 * 1024 * 1024:
+                raise RuntimeError('Skill 文件超过 4 MB 限制')
+            return payload.decode('utf-8')
     # Fallback: blobs API
     sha = data.get('sha')
     if not sha:
         raise RuntimeError(f'无法读取 {path}')
     blob = _http_get_json(f'{GITCODE_API}/repos/{owner}/{repo}/git/blobs/{sha}', token=token)
+    if not isinstance(blob, dict) or not isinstance(blob.get('content'), str):
+        raise RuntimeError('GitCode blob 响应格式异常')
     return base64.b64decode(blob['content']).decode('utf-8')
 
 
 def _list_dir(owner_repo: str, path: str, token: Optional[str] = None) -> List[Dict]:
     owner, repo = owner_repo.split('/', 1)
-    api = f'{GITCODE_API}/repos/{owner}/{repo}/contents/{path}'
+    api = f'{GITCODE_API}/repos/{owner}/{repo}/contents/{quote(path, safe="/")}'
     data = _http_get_json(api, token=token)
     if not isinstance(data, list):
         raise RuntimeError(f'{path} 不是目录')
@@ -202,49 +233,81 @@ def install_skill(name: str, *, token: Optional[str] = None,
                   catalog: str = ASCEND_SKILLS_REPO,
                   prefix: str = ASCEND_SKILLS_PREFIX) -> Dict:
     """Install SKILL.md (+ references/*.md if small) into ~/.reviewagent/skills/<name>/."""
-    import os
     name = (name or '').strip()
     if not name:
         return {'ok': False, 'error': '用法: /skill install <name>'}
     if name not in OFFICIAL_CATALOG and not re.fullmatch(r'[a-z0-9][a-z0-9_-]{1,80}', name):
         return {'ok': False, 'error': f'非法 skill 名: {name}'}
-    token = token or os.getenv('GITCODE_TOKEN') or os.getenv('GITHUB_TOKEN')
-    ensure_home()
+    if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*', catalog) or any(
+        part in ('', '.', '..') for part in prefix.split('/')
+    ) or '\\' in prefix:
+        return {'ok': False, 'error': '非法 skill 来源路径'}
+    token = token or os.getenv('GITCODE_TOKEN')
+    try:
+        ensure_home()
+    except OSError as exc:
+        return {'ok': False, 'error': f'创建用户目录失败: {exc}'}
     dest = Path(home_dir()) / 'skills' / name
-    dest.mkdir(parents=True, exist_ok=True)
     remote_skill = f'{prefix}/{name}/SKILL.md'
     try:
+        # Resolve every target before writing so remote filenames/symlinks cannot escape the skill.
+        skill_root = (Path(home_dir()) / 'skills').resolve()
+        if dest.is_symlink() or dest.resolve().parent != skill_root:
+            raise RuntimeError('Skill 目标路径越界')
         skill_text = _download_blob_text(catalog, remote_skill, token=token)
-    except (OSError, urllib.error.HTTPError, urllib.error.URLError, RuntimeError, FileNotFoundError) as exc:
-        return {'ok': False, 'error': f'拉取失败: {exc}', 'remote': remote_skill}
-    (dest / 'SKILL.md').write_text(skill_text, encoding='utf-8')
-    saved = ['SKILL.md']
-    # Optional small references
-    try:
-        entries = _list_dir(catalog, f'{prefix}/{name}/references', token=token)
-        ref_dir = dest / 'references'
-        ref_dir.mkdir(exist_ok=True)
+        if not skill_text.strip():
+            raise RuntimeError('SKILL.md 为空')
+        files = {'SKILL.md': skill_text}
+        omitted = []
+        try:
+            entries = _list_dir(catalog, f'{prefix}/{name}/references', token=token)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:
+                raise
+            entries = []
         for entry in entries:
+            if not isinstance(entry, dict):
+                raise RuntimeError('references 目录响应格式异常')
             if entry.get('type') != 'file':
+                omitted.append(f'references/{entry.get("name", "?")}: 非文件，未安装')
                 continue
             fname = entry.get('name') or ''
+            if not isinstance(fname, str) or '/' in fname or '\\' in fname or ':' in fname or fname in ('.', '..'):
+                raise RuntimeError('references 包含非法文件名')
             if not fname.endswith('.md'):
+                omitted.append(f'references/{fname}: 仅支持 Markdown，未安装')
                 continue
             if int(entry.get('size') or 0) > 200_000:
+                omitted.append(f'references/{fname}: 超过 200 KB 限制')
                 continue
             body = _download_blob_text(catalog, f'{prefix}/{name}/references/{fname}', token=token)
-            (ref_dir / fname).write_text(body, encoding='utf-8')
-            saved.append(f'references/{fname}')
-    except Exception:
-        pass
+            if len(body.encode('utf-8')) > 200_000:
+                omitted.append(f'references/{fname}: 超过 200 KB 限制')
+                continue
+            files[f'references/{fname}'] = body
+        for relative in list(files) + ['install.json']:
+            target = (dest / relative).resolve()
+            target.relative_to(dest.resolve())
+            if (dest / relative).is_symlink():
+                raise RuntimeError('Skill 文件为符号链接，拒绝覆盖')
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
+        return {'ok': False, 'error': f'拉取失败: {exc}', 'remote': remote_skill}
     meta = {
         'name': name,
         'source': catalog,
         'prefix': prefix,
-        'files': saved,
+        'files': list(files),
+        'omitted': omitted,
         'url': f'https://gitcode.com/{catalog}/tree/master/{prefix}/{name}',
     }
-    (dest / 'install.json').write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding='utf-8')
+    files['install.json'] = json.dumps(meta, ensure_ascii=False, indent=2)
+    try:
+        for relative, body in files.items():
+            path = dest / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body, encoding='utf-8')
+    except OSError as exc:
+        return {'ok': False, 'error': f'写入失败: {exc}', 'path': str(dest)}
     return {'ok': True, 'path': str(dest), 'meta': meta}
 
 

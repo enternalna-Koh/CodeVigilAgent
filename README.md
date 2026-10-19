@@ -17,6 +17,16 @@
 
 路由说明见 [AGENTS.md](AGENTS.md)。Skills 在 `.cursor/skills/`（镜像 `.agents/skills/`）。对话内 `/skill`、内置昇腾文档 MCP `/mcp`；社区采集 `reviewagent collect --community opengauss`。
 
+### Skills、MCP 与社区采集的使用边界
+
+对话中可用 `/review opengauss`、`/fix opengauss` 明确选择 openGauss 场景；一次性审查使用 `reviewagent review --scenario opengauss`。
+
+`/skill load <name>` 只接受完整材料，已加载技能的组合正文上限为 16,000 字符、32 KiB UTF-8；超限会保留原有技能并提示失败。恢复会话时只提示原技能名，需要重新加载。安装器当前仅下载 `SKILL.md` 和小于等于 200 KB 的 Markdown references；遗漏材料会显示为不完整。references 保存在本地，`/skill load` 当前只把 `SKILL.md` 正文加入会话。
+
+`/mcp tools <server>` 启动配置的本地 MCP 进程并读取工具。自动调查只执行服务端声明 `readOnlyHint: true` 且未声明破坏性的工具；该声明由服务端提供，配置自定义服务时仍需确认来源。`/mcp call <server> <tool> {}` 可显式调用其他工具，参数须为 JSON 对象。退出对话、重载或超时会清理连接。内置服务仍需实际安装包及对应 Node 环境，本仓离线回归使用本地假服务端。
+
+GitCode 在线上下文、技能安装和社区采集只读取 `GITCODE_TOKEN`，不会借用 `GITHUB_TOKEN`。采集失败会返回非零退出码，保留失败资源的旧数据；成功资源仍可更新。新采集文件名包含社区、owner 和仓库名，原有旧命名文件保留。
+
 ---
 
 ## 🚀 30 秒快速开始（Hermes 风格）
@@ -126,8 +136,7 @@ Agent 会依次获取正文、评论、PR 文件补丁和人工 Review（GitHub 
 python ascend_cli.py chat -m "帮我分析 https://github.com/Ascend/pytorch/pull/123"
 ```
 
-当前在线获取器只接受 GitHub 的公开 PR/Issue URL；私有仓库需要 `GITHUB_TOKEN`，网络或权限失败时
-会明确报告失败原因。Gitee 等其他来源可以直接粘贴正文，避免把网页不完整内容误判为已审查。
+在线获取器支持 GitHub、GitCode 的 PR/Issue URL；认证分别使用 `GITHUB_TOKEN`、`GITCODE_TOKEN`，网络或权限失败会明确报告原因。Gitee 等其他来源可以直接粘贴正文，避免把网页不完整内容误判为已审查。
 
 这条入口是后续 Agent 能力的基础：文件搜索、测试执行、Issue/PR 检索和自动修复都可以沿着同一套仓库上下文继续接入。
 

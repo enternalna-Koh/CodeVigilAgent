@@ -9,6 +9,7 @@ Model: env via cc-switch (OPENAI_* / ANTHROPIC_* / AI_*) or `reviewagent config`
 import argparse
 import json
 import os
+import shlex
 import sys
 from pathlib import Path
 
@@ -91,7 +92,7 @@ def review(args: argparse.Namespace) -> int:
             print(f"[NEED CONTEXT] {payload['question']}")
             print(f"  reason: {specialist.reason}")
             if specialist.status == "needs_context":
-                print("  使用 --scenario operator|inference 明确场景后重试。")
+                print("  使用 --scenario operator|inference|opengauss 明确场景后重试。")
             else:
                 print("  请恢复必要规则文件或调整专业上下文预算后重试。")
         if args.output:
@@ -109,7 +110,7 @@ def review(args: argparse.Namespace) -> int:
         specialist_text = ""
         if not args.json:
             print(f"[INFO] 未加载专业 Agent（{specialist.reason or specialist.status}）；使用通用审查。"
-                  "需要时可加 --scenario operator|inference。", file=sys.stderr)
+                  "需要时可加 --scenario operator|inference|opengauss。", file=sys.stderr)
 
     reviewer = SmartReviewer(_default_config(args.config), verbose=not args.json)
     if args.offline:
@@ -149,8 +150,11 @@ def test(args: argparse.Namespace) -> int:
 def collect_cmd(args: argparse.Namespace) -> int:
     """Collect GitCode community issues/PRs/CI/review dialogs."""
     from scripts.collect_gitcode_community import collect_community
-    result = collect_community(
-        args.community, pages=args.pages, dialog_limit=args.dialog_limit)
+    try:
+        result = collect_community(
+            args.community, pages=args.pages, dialog_limit=args.dialog_limit)
+    except (OSError, ValueError) as exc:
+        result = {'ok': False, 'error': str(exc)}
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get('ok') else 1
 
@@ -469,7 +473,7 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
     if cmd in ('/new', '/newchat', '/clear-chat'):
         # /new [可选名字] — 保存当前并开空白对话；可用 /back 返回
         name = arg.strip() or None
-        has_content = bool(agent.history or agent.contexts)
+        has_content = bool(agent.history or agent.contexts or agent.pending_fix or agent.active_skills)
         if not has_content:
             print(ok('已是空白对话，可直接开始。'))
             print(mute('返回旧会话: /sessions → /resume <编号或名字> · /back'))
@@ -487,6 +491,8 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
         try:
             data = load_session('previous')
             apply_to_agent(agent, data)
+            if data.get('skill_names'):
+                print(mute('  原加载技能未自动恢复，请重新 /skill load。'))
             print(ok(f"已返回上一会话: {data.get('session_name') or Path(data.get('_path','')).name}"))
             print(mute(
                 f"  mode={agent.chat_mode} history={len(agent.history)//2} "
@@ -500,9 +506,9 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
 
     if cmd in ('/save', '/session-save'):
         try:
+            path = save_session(agent, arg.strip() or None)
             if arg.strip():
                 agent.session_name = arg.strip()
-            path = save_session(agent, arg.strip() or None)
             print(ok(f'会话已保存: {path.name}'))
             print(mute('恢复: /resume · /resume <名字|编号> · /back · /sessions'))
         except Exception as exc:
@@ -542,6 +548,8 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
         try:
             data = load_session(arg.strip() or None)
             apply_to_agent(agent, data)
+            if data.get('skill_names'):
+                print(mute('  原加载技能未自动恢复，请重新 /skill load。'))
             label = data.get('session_name') or Path(data.get('_path', '')).name
             print(ok(f"已恢复会话: {label}"))
             print(mute(
@@ -563,7 +571,7 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
         online = any(p in ('online', '--online', 'ai') for p in parts)
         scenario = None
         for p in parts:
-            if p in ('operator', 'inference'):
+            if p in ('operator', 'inference', 'opengauss'):
                 scenario = p
         begin_think('本地 Git 审查')
         try:
@@ -639,7 +647,7 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
     if cmd == '/fix':
         explicit = None
         first = arg.split()[0] if arg.split() else ''
-        if first in ('operator', 'inference', 'general'):
+        if first in ('operator', 'inference', 'opengauss', 'general'):
             explicit = None if first == 'general' else first
         begin_think('生成补丁预览')
         try:
@@ -722,6 +730,8 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
         if getattr(agent, 'last_reply', None):
             body = (agent.last_reply or '')[:4000]
         print(mute(f'标题: {title}{"  (draft)" if draft else ""}'))
+        print(mute('正文（最近回复）:'))
+        print(body or '(空)')
         try:
             confirm = input(warn('确认用 gh 创建 PR？输入 y 继续: ')).strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -828,6 +838,9 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
             if result.get('ok'):
                 print(ok(f"已安装到 {result.get('path')}"))
                 print(mute(f"来源: {(result.get('meta') or {}).get('url', '')}"))
+                omitted = (result.get('meta') or {}).get('omitted') or []
+                if omitted:
+                    print(warn('技能材料未完整安装: ' + '; '.join(omitted)))
                 print(mute(f'接着: /skill load {name}'))
             else:
                 print(warn(result.get('error') or '安装失败'))
@@ -880,7 +893,10 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
                     print(warn('arguments 必须是 JSON 对象'))
                     return 'handled'
             print(mute(f'MCP call {server}/{tool} …'))
-            result = reg.call(server, tool, args_obj if isinstance(args_obj, dict) else {})
+            if not isinstance(args_obj, dict):
+                print(warn('arguments 必须是 JSON 对象'))
+                return 'handled'
+            result = reg.call(server, tool, args_obj)
             print(json.dumps(result, ensure_ascii=False, indent=2)[:8000])
             return 'handled'
         print(mute('用法: /mcp | /mcp tools ascend-doc | /mcp call ascend-doc <tool> {} | /mcp reload'))
@@ -982,6 +998,7 @@ def chat(args: argparse.Namespace) -> int:
         try:
             reply = agent.answer(args.message)
         finally:
+            agent.close()
             end_think('回答就绪')
         _print_agent_reply(reply)
         return 0 if agent.last_ok else 1
@@ -1036,6 +1053,8 @@ def _autosave_session(agent: ConversationAgent) -> None:
         print(mute(f'会话已自动保存（/resume 可恢复）: {path.name}'))
     except Exception as exc:
         print(warn(f'会话自动保存失败: {exc}'))
+    finally:
+        agent.close()
 
 
 def _handle_git_slash(arg: str, agent: ConversationAgent) -> str:
@@ -1067,7 +1086,11 @@ def _handle_git_slash(arg: str, agent: ConversationAgent) -> str:
         _print_agent_reply(git_work.test_ssh())
         return 'handled'
     if sub == 'add':
-        paths = rest.split() if rest else None
+        try:
+            paths = shlex.split(rest.replace(chr(92), '/')) if rest else None
+        except ValueError as exc:
+            print(warn(f'路径格式错误: {exc}'))
+            return 'handled'
         r = git_work.stage_paths(paths, cwd=cwd)
         print(ok('已暂存。') if r.get('ok') else warn(r.get('out') or '暂存失败'))
         return 'handled'
@@ -1098,7 +1121,7 @@ def _handle_ship(arg: str, agent: ConversationAgent) -> str:
         return 'handled'
     commit_md = git_work.commit_changes(message, cwd=cwd)
     _print_agent_reply(commit_md)
-    if '已提交' not in commit_md:
+    if not commit_md.startswith('已提交: '):
         return 'handled'
 
     try:
@@ -1112,9 +1135,12 @@ def _handle_ship(arg: str, agent: ConversationAgent) -> str:
         return 'handled'
     push_md = git_work.push_branch(cwd=cwd)
     _print_agent_reply(push_md)
-    if '已推送' not in push_md:
+    if not push_md.startswith('已推送分支 '):
         return 'handled'
 
+    body = (getattr(agent, 'last_reply', None) or '')[:4000]
+    print(mute('PR 正文（最近回复）:'))
+    print(body or '(空)')
     try:
         c3 = input(warn(f'③ 创建 PR「{message}」？输入 y（draft 输入 d）: ')).strip().lower()
     except (EOFError, KeyboardInterrupt):
@@ -1122,9 +1148,8 @@ def _handle_ship(arg: str, agent: ConversationAgent) -> str:
         print(warn('已推送但未开 PR。可稍后 /pr'))
         return 'handled'
     if c3 in ('d', 'draft'):
-        _print_agent_reply(git_work.create_pull_request(message, cwd=cwd, draft=True))
+        _print_agent_reply(git_work.create_pull_request(message, body=body, cwd=cwd, draft=True))
     elif c3 in ('y', 'yes', '是'):
-        body = (getattr(agent, 'last_reply', None) or '')[:4000]
         _print_agent_reply(git_work.create_pull_request(message, body=body, cwd=cwd, draft=False))
     else:
         print(mute('已跳过 PR。可稍后 /pr'))

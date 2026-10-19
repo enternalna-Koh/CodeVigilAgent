@@ -90,24 +90,14 @@ class McpClientTests(unittest.TestCase):
         self.assertEqual(cfg['ascend-doc'].args[-1], 'ascend-doc-mcp@latest')
 
     def test_fake_stdio_session(self):
-        # Minimal MCP-ish server: Content-Length JSON-RPC
+        # MCP stdio uses newline-delimited JSON-RPC.
         server = r'''
 import sys, json
 def read_msg():
-    headers = {}
-    while True:
-        line = sys.stdin.buffer.readline()
-        if not line or line in (b"\r\n", b"\n"):
-            break
-        if b":" in line:
-            k, v = line.decode().split(":", 1)
-            headers[k.strip().lower()] = v.strip()
-    n = int(headers.get("content-length", "0"))
-    body = sys.stdin.buffer.read(n)
-    return json.loads(body.decode())
+    return json.loads(sys.stdin.buffer.readline())
+
 def write_msg(obj):
-    raw = json.dumps(obj).encode()
-    sys.stdout.buffer.write(f"Content-Length: {len(raw)}\r\n\r\n".encode() + raw)
+    sys.stdout.buffer.write(json.dumps(obj).encode() + b"\n")
     sys.stdout.buffer.flush()
 while True:
     msg = read_msg()

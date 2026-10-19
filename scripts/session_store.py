@@ -46,6 +46,7 @@ def serialize_agent(agent) -> Dict[str, Any]:
         'history': list(getattr(agent, 'history', []) or [])[-16:],
         'contexts': list(getattr(agent, 'contexts', []) or []),
         'pending_fix': pending,
+        'skill_names': [sk['name'] for sk in getattr(agent, 'active_skills', [])],
         'work_root': str(getattr(agent, 'work_root', '')),
     }
 
@@ -81,19 +82,28 @@ def apply_to_agent(agent, data: Dict[str, Any]) -> None:
     agent.contexts = list(data.get('contexts') or [])
     # Pending fixes contain structured FileEdit objects — do not revive from JSON.
     agent.pending_fix = None
+    agent.active_skills = []
+    agent.last_tools = []
     agent.session_name = data.get('session_name')
+
+
+def _session_filename(name: str) -> str:
+    safe = ''.join(ch if ch.isalnum() or ch in '-_' else '-' for ch in name.strip())[:64]
+    return f'{safe or "session"}.json'
 
 
 def save_session(agent, name: Optional[str] = None) -> Path:
     payload = serialize_agent(agent)
     if name:
+        if name.strip().isdigit() or name.strip().lower() in (
+                'latest', 'previous', 'prev', 'back', '上一个', '上一会话'):
+            raise ValueError('会话名为保留名称或编号，请使用其他名字')
         payload['session_name'] = name.strip()
     elif getattr(agent, 'session_name', None):
         payload['session_name'] = agent.session_name
     root = sessions_dir()
     if name:
-        safe = ''.join(ch if ch.isalnum() or ch in '-_' else '-' for ch in name.strip())[:64]
-        target = root / f'{safe or "session"}.json'
+        target = root / _session_filename(name)
     else:
         target = root / f'session-{_stamp()}.json'
     text = json.dumps(payload, ensure_ascii=False, indent=2) + '\n'
@@ -137,7 +147,7 @@ def load_session(path: Optional[str] = None) -> Dict[str, Any]:
         p = Path(path).expanduser()
         # Bare session names take precedence over same-named files in cwd.
         if Path(path).name == path:
-            saved = root / (path if Path(path).suffix else f'{path}.json')
+            saved = root / (path if Path(path).suffix == '.json' else _session_filename(path))
             if saved.is_file():
                 p = saved
     if not p.is_file():

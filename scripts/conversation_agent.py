@@ -150,7 +150,7 @@ class ContextFetcher:
 
     def __init__(self, token=None, gitcode_token=None):
         self.token = token or os.getenv('GITHUB_TOKEN')
-        self.gitcode_token = gitcode_token or os.getenv('GITCODE_TOKEN') or self.token
+        self.gitcode_token = gitcode_token or os.getenv('GITCODE_TOKEN')
 
     @staticmethod
     def _author(user):
@@ -193,9 +193,6 @@ class ContextFetcher:
             headers['Authorization'] = f'Bearer {self.gitcode_token}'
             headers['PRIVATE-TOKEN'] = self.gitcode_token
         url = 'https://api.gitcode.com/api/v5' + endpoint
-        if self.gitcode_token and 'access_token=' not in url:
-            sep = '&' if '?' in url else '?'
-            url = f'{url}{sep}access_token={self.gitcode_token}'
         return self._http_get_json(url, headers, 'GitCode')
 
     def parse_url(self, url):
@@ -558,17 +555,22 @@ class ConversationAgent:
 
     def attach_skill(self, name: str) -> str:
         from scripts.skill_runtime import load_skill
-        loaded = load_skill(name)
+        try:
+            loaded = load_skill(name)
+        except (OSError, ValueError) as exc:
+            return f'skill 加载失败: {exc}'
         if loaded.status == 'missing':
             return f'未找到 skill: {name}。先 /skill list 或 /skill install {name}'
-        # Replace same name if reloaded
-        self.active_skills = [s for s in self.active_skills if s.get('name') != loaded.name]
-        self.active_skills.append({
-            'name': loaded.name,
-            'path': loaded.path,
-            'status': loaded.status,
-            'text': loaded.text,
-        })
+        if loaded.status != 'ready':
+            return f'skill「{loaded.name}」未完整加载，请缩小技能内容后重试'
+        skills = [s for s in self.active_skills if s.get('name') != loaded.name]
+        skills.append({'name': loaded.name, 'path': loaded.path,
+                       'status': loaded.status, 'text': loaded.text})
+        from scripts.specialist_context import MAX_CHARS, MAX_BYTES
+        text = '\n\n'.join(f"### Skill: {sk['name']}\n{sk['text']}" for sk in skills)
+        if len(text) > MAX_CHARS or len(text.encode('utf-8')) > MAX_BYTES:
+            return 'Skills 总体积超出上下文预算，未变更已加载技能'
+        self.active_skills = skills
         return f'已加载 skill「{loaded.name}」（{loaded.chars} 字符，本会话生效）'
 
     def mcp_registry(self):
@@ -576,6 +578,10 @@ class ConversationAgent:
             from scripts.mcp_client import get_registry
             self._mcp = get_registry()
         return self._mcp
+
+    def close(self) -> None:
+        if self._mcp is not None:
+            self._mcp.close()
 
     def discard_fix(self) -> str:
         if not self.pending_fix:
@@ -595,7 +601,7 @@ class ConversationAgent:
         except (ValueError, OSError) as exc:
             return self._fail(f'专业上下文未就绪：{exc}')
         self.progress(f'识别领域: {scenario}（{reason or "n/a"}）')
-        if scenario in ('operator', 'inference') and not specialist_text:
+        if scenario in ('operator', 'inference', 'opengauss') and not specialist_text:
             self.progress('专业规范未加载到正文，将用通用规则生成补丁预览')
 
         payload = {
@@ -710,7 +716,18 @@ class ConversationAgent:
                 seen.add(key)
                 self.progress(f'调查 {step + 1}/3 · mcp:{server}/{name}')
                 try:
-                    output = self.mcp_registry().call(server, name, arguments)
+                    registry = self.mcp_registry()
+                    session = registry.get_session(server)
+                    descriptor = next((t for t in session.tools
+                                       if isinstance(t, dict) and t.get('name') == name), {}) if session else {}
+                    annotations = descriptor.get('annotations') or {}
+                    if (not isinstance(annotations, dict) or
+                            annotations.get('readOnlyHint') is not True or
+                            annotations.get('destructiveHint') is True):
+                        results.append({'tool': tool, 'argument': f'{server}/{name}',
+                                        'error': '自动调查仅调用标注为只读的工具；其他工具请明确 /mcp call'})
+                        continue
+                    output = registry.call(server, name, arguments)
                     results.append({'tool': tool, 'argument': f'{server}/{name}', 'result': output})
                 except Exception:
                     results.append({'tool': tool, 'argument': f'{server}/{name}', 'error': 'MCP 调用失败'})
@@ -856,14 +873,7 @@ class ConversationAgent:
 
         system = SYSTEM_PROMPT
         if self.active_skills:
-            packs = []
-            budget = 12000
-            for sk in self.active_skills:
-                body = (sk.get('text') or '')[:budget]
-                budget -= len(body)
-                packs.append(f"### Skill: {sk.get('name')}\n{body}")
-                if budget <= 0:
-                    break
+            packs = [f"### Skill: {sk['name']}\n{sk['text']}" for sk in self.active_skills]
             system = SYSTEM_PROMPT + '\n\n## 本会话已加载 Skills\n' + '\n\n'.join(packs)
         messages = [{'role': 'system', 'content': system}]
         messages.extend(self.history[-8:])

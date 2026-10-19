@@ -13,7 +13,7 @@ from scripts.specialist_context import detect_scenario, load_specialist_context
 FIX_SYSTEM = """你是 ReviewAgent 的补丁助手。根据 PR/Issue 证据与昇腾规范，提出**最小必要**的本地修改。
 只输出一个 JSON 对象，不要 Markdown 围栏，不要解释：
 {
-  "scenario": "operator"|"inference"|"general",
+  "scenario": "operator"|"inference"|"opengauss"|"general",
   "summary": "一句话说明改什么、为什么",
   "files": [
     {
