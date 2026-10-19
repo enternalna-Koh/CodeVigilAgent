@@ -1,0 +1,32 @@
+{
+  "id": "opengauss",
+  "name": "openGauss",
+  "host": "gitcode",
+  "description": "openGauss 社区：Plugin / examples / docs 的 Issue、PR、CI 与师生审核对话",
+  "repos": [
+    {
+      "owner": "opengauss",
+      "repo": "Plugin",
+      "collect": ["issues", "pulls", "ci", "dialogs"]
+    },
+    {
+      "owner": "opengauss",
+      "repo": "examples",
+      "collect": ["issues", "dialogs"]
+    },
+    {
+      "owner": "opengauss",
+      "repo": "docs",
+      "collect": ["issues", "pulls", "ci", "dialogs"],
+      "highlight_prs": [8872]
+    }
+  ],
+  "seed_urls": [
+    "https://gitcode.com/opengauss/Plugin/issues",
+    "https://gitcode.com/opengauss/Plugin/pulls",
+    "https://gitcode.com/opengauss/examples/issues",
+    "https://gitcode.com/opengauss/docs/pull/8872",
+    "https://gitcode.com/opengauss/docs/issues",
+    "https://gitcode.com/opengauss/docs/pulls"
+  ]
+}

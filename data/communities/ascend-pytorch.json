@@ -1,0 +1,25 @@
+{
+  "id": "ascend-pytorch",
+  "name": "Ascend for PyTorch",
+  "host": "gitcode",
+  "description": "Ascend for PyTorch / API 一致性与 pytorch-ecosystem 社区任务",
+  "repos": [
+    {
+      "owner": "Ascend",
+      "repo": "pytorch-ecosystem",
+      "collect": ["issues", "pulls", "dialogs"]
+    },
+    {
+      "owner": "Ascend",
+      "repo": "pytorch",
+      "collect": ["issues", "pulls", "ci", "dialogs"]
+    }
+  ],
+  "agent_skills_path": "01_tasks/resources/tools/agent_skills",
+  "agent_skills_url": "https://gitcode.com/Ascend/pytorch-ecosystem/tree/master/01_tasks/resources/tools/agent_skills",
+  "api_consistency_doc": "https://docs.qq.com/doc/DT3R3eVNWdm1yUkdR",
+  "notes": [
+    "群公告：API 一致性对齐任务请先阅读赛事说明文档；规则以任务书为准。",
+    "skill 仓库已迁移到 pytorch-ecosystem agent_skills 目录。"
+  ]
+}

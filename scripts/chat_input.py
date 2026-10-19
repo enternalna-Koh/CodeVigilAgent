@@ -57,8 +57,8 @@ def print_input_frame(network='auto', chat_mode='auto', session_lane='chat'):
     tty = hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
     if chat_mode == 'auto':
         lane = '正式' if session_lane == 'work' else '日常'
-        mode_tag = f'自动→{lane}'
-        title_txt = f' * 自动分流  · 当前{lane}'
+        mode_tag = f'AI调换→{lane}'
+        title_txt = f' * AI自动调换  · 当前{lane}'
     else:
         mode_tag = {'chat': '钉住日常', 'work': '钉住正式'}.get(chat_mode, chat_mode)
         title_txt = {
@@ -66,9 +66,9 @@ def print_input_frame(network='auto', chat_mode='auto', session_lane='chat'):
             'work': ' * 正式审查（已钉住）',
         }.get(chat_mode, ' * 对话')
     if sys.platform == 'win32' and _smart_input_wanted() and tty:
-        hint_txt = f' {mode_tag} · 粘贴后Enter发送 · /mode auto · /exit'
+        hint_txt = f' {mode_tag} · /skill · /mcp · /exit'
     else:
-        hint_txt = f' {mode_tag} · /mode auto · /paste · net={network}'
+        hint_txt = f' {mode_tag} · /skill · /mcp · /paste · net={network}'
     title = _pad_row(title_txt, inner_w)
     hint = _pad_row(hint_txt, inner_w)
     print()

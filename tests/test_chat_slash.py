@@ -44,7 +44,7 @@ class SlashDispatchTests(unittest.TestCase):
         result, out = self._run('/mode')
         self.assertEqual(result, 'handled')
         self.assertIn('当前对话模式', out)
-        self.assertIn('自动分流', out)
+        self.assertIn('AI自动调换', out)
 
     def test_model_switch_same_gateway_no_key_prompt(self):
         written = {}

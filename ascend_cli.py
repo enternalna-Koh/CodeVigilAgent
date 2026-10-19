@@ -43,10 +43,12 @@ from scripts.session_store import (
     list_sessions,
     load_session,
     save_session,
+    start_new_conversation,
 )
 from scripts.ci_log_analyzer import analyze_ci_log, format_ci_report
 from scripts.chat_review import run_local_review
 from scripts.context_compare import compare_contexts, format_compare_report
+from scripts import git_work
 
 
 def _default_config(cli_value: str = None) -> str:
@@ -142,6 +144,15 @@ def test(args: argparse.Namespace) -> int:
         if result["returncode"] != 0:
             return 1
     return 0
+
+
+def collect_cmd(args: argparse.Namespace) -> int:
+    """Collect GitCode community issues/PRs/CI/review dialogs."""
+    from scripts.collect_gitcode_community import collect_community
+    result = collect_community(
+        args.community, pages=args.pages, dialog_limit=args.dialog_limit)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result.get('ok') else 1
 
 
 def search(args: argparse.Namespace) -> int:
@@ -373,9 +384,10 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
 
     if cmd == '/mode':
         if not arg:
-            labels = {'auto': '自动分流', 'chat': '日常对话', 'work': '正式工作'}
+            labels = {'auto': 'AI自动调换', 'chat': '日常对话', 'work': '正式工作'}
             print(ok(f'当前对话模式: {labels.get(agent.chat_mode, agent.chat_mode)}'))
-            print(mute('  /chat 日常  ·  /work 正式审查  ·  /mode auto'))
+            print(mute('  /mode auto = AI自动调换  ·  /chat 钉住日常  ·  /work 钉住正式'))
+            print(mute('  /new 新开对话  ·  /back 返回上一会话  ·  /sessions 列表'))
         else:
             print(ok(agent.set_chat_mode(arg.strip())))
         return 'handled'
@@ -401,16 +413,20 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
         data = read_config(str(config_file or config_path())) or {}
         env = load_config_from_env()
         merged = agent.model_config or merge_config(data, env)
-        labels = {'auto': '自动分流', 'chat': '日常(钉住)', 'work': '正式(钉住)'}
+        labels = {'auto': 'AI自动调换', 'chat': '日常(钉住)', 'work': '正式(钉住)'}
         lane = '正式' if snap['session_lane'] == 'work' else '日常'
         print(ok('会话状态'))
         print(mute(f"  模式: {labels.get(snap['chat_mode'], snap['chat_mode'])} · 当前车道: {lane}"))
+        print(mute(f"  会话名: {getattr(agent, 'session_name', None) or '(未命名)'}"))
         print(mute(f"  上轮: {snap['last_turn'] or '-'} · 联网: {snap['network']}"))
         print(mute(f"  上下文: {snap['contexts']} · 对话轮次: {snap['history_turns']}"))
         print(mute(f"  待应用补丁: {'有' if snap['pending_fix'] else '无'} · 最近工具: {snap['last_tools']}"))
+        skills = snap.get('active_skills') or []
+        if skills:
+            print(mute('  Skills: ' + ', '.join(s.get('name', '?') for s in skills)))
         print(mute(f"  模型: {merged.get('provider')}/{merged.get('model')}"))
         print(mute(f"  工作区: {snap['work_root']}"))
-        print(mute('  命令: /history /export /retry /context /model /help'))
+        print(mute('  /new · /back · /skill · /mcp · /ship · /help'))
         return 'handled'
 
     if cmd in ('/history', '/hist'):
@@ -450,16 +466,50 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
         _print_agent_reply(reply)
         return 'handled'
 
+    if cmd in ('/new', '/newchat', '/clear-chat'):
+        # /new [可选名字] — 保存当前并开空白对话；可用 /back 返回
+        name = arg.strip() or None
+        has_content = bool(agent.history or agent.contexts)
+        if not has_content:
+            print(ok('已是空白对话，可直接开始。'))
+            print(mute('返回旧会话: /sessions → /resume <编号或名字> · /back'))
+            return 'handled'
+        try:
+            path = start_new_conversation(agent, name)
+            print(ok(f'已新开对话（旧会话已存，可用 /back 返回）'))
+            print(mute(f'  存档: {path.name}'))
+            print(mute('  /back 返回上一会话 · /sessions 看列表 · /resume 1 按编号恢复'))
+        except Exception as exc:
+            print(warn(f'新开失败: {exc}'))
+        return 'handled'
+
+    if cmd in ('/back', '/prev', '/previous'):
+        try:
+            data = load_session('previous')
+            apply_to_agent(agent, data)
+            print(ok(f"已返回上一会话: {data.get('session_name') or Path(data.get('_path','')).name}"))
+            print(mute(
+                f"  mode={agent.chat_mode} history={len(agent.history)//2} "
+                f"contexts={len(agent.contexts)}"
+            ))
+        except FileNotFoundError:
+            print(warn('没有「上一会话」。可 /sessions 查看，再用 /resume <编号>。'))
+        except Exception as exc:
+            print(warn(f'返回失败: {exc}'))
+        return 'handled'
+
     if cmd in ('/save', '/session-save'):
         try:
+            if arg.strip():
+                agent.session_name = arg.strip()
             path = save_session(agent, arg.strip() or None)
-            print(ok(f'会话已保存: {path}'))
-            print(mute('恢复: /resume  或  /resume <名字> · 列表: /sessions'))
+            print(ok(f'会话已保存: {path.name}'))
+            print(mute('恢复: /resume · /resume <名字|编号> · /back · /sessions'))
         except Exception as exc:
             print(warn(f'保存失败: {exc}'))
         return 'handled'
 
-    if cmd in ('/sessions', '/session-list'):
+    if cmd in ('/sessions', '/session-list', '/chats'):
         parts = arg.split()
         if parts and parts[0] in ('clean', 'clear', 'prune'):
             wipe = any(p in ('all', '--all') for p in parts[1:])
@@ -477,21 +527,23 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
             return 'handled'
         rows = list_sessions(12)
         if not rows:
-            print(warn('还没有已保存会话。先 /save 或正常 /exit（会自动存 latest）。'))
+            print(warn('还没有已保存会话。先 /save、/new 或 exit（会自动存）。'))
             return 'handled'
-        print(ok('最近会话'))
-        for row in rows:
+        print(ok('最近会话（/resume <编号> 或 /resume <名字>）'))
+        for i, row in enumerate(rows, 1):
+            title = row.get('title') or row['name']
             print(mute(
-                f"  {row['name']}  turns={row['turns']} ctx={row['contexts']}  {row['saved_at']}"
+                f"  {i}. {title}  turns={row['turns']} ctx={row['contexts']}  {row['saved_at']}"
             ))
-        print(mute('恢复: /resume <名字> · 清理: /sessions clean [保留数] · /sessions clean all'))
+        print(mute('/new 新开 · /back 上一会话 · /sessions clean 5'))
         return 'handled'
 
-    if cmd in ('/resume', '/load'):
+    if cmd in ('/resume', '/load', '/open'):
         try:
             data = load_session(arg.strip() or None)
             apply_to_agent(agent, data)
-            print(ok(f"已恢复会话: {data.get('_path')}"))
+            label = data.get('session_name') or Path(data.get('_path', '')).name
+            print(ok(f"已恢复会话: {label}"))
             print(mute(
                 f"  mode={agent.chat_mode} lane={agent.session_lane} "
                 f"history={len(agent.history)//2} contexts={len(agent.contexts)}"
@@ -500,7 +552,7 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
                 print(mute('  原待确认补丁未自动恢复，请重新 /fix。'))
         except FileNotFoundError as exc:
             print(warn(str(exc)))
-            print(mute('可先 /sessions 查看，或重新对话后 /save。'))
+            print(mute('可先 /sessions 查看编号，或 /back 返回上一会话。'))
         except Exception as exc:
             print(warn(f'恢复失败: {exc}'))
         return 'handled'
@@ -602,16 +654,88 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
                 confirm = ''
                 print()
             if confirm in ('y', 'yes', '是'):
-                _print_agent_reply(agent.apply_pending_fix(confirm=True))
+                applied = agent.apply_pending_fix(confirm=True)
+                _print_agent_reply(applied)
+                print(mute('生产力下一步: /commit "说明" · /push · /pr · 或 /ship "说明"'))
         return 'handled'
 
     if cmd in ('/apply', '/fix-apply'):
-        _print_agent_reply(agent.apply_pending_fix(confirm=True))
+        reply = agent.apply_pending_fix(confirm=True)
+        _print_agent_reply(reply)
+        if agent.last_ok and '未写入' not in (reply or '') and '没有待应用' not in (reply or ''):
+            print(mute('生产力下一步: /git status · /commit "说明" · /push · /pr · 或 /ship "说明"'))
         return 'handled'
 
     if cmd in ('/discard', '/fix-discard'):
         _print_agent_reply(agent.discard_fix())
         return 'handled'
+
+    if cmd in ('/git', '/vcs'):
+        return _handle_git_slash(arg, agent)
+
+    if cmd in ('/commit', '/git-commit'):
+        message = arg.strip()
+        if not message:
+            print(warn('用法: /commit <提交说明>'))
+            print(mute(f'示例: /commit {git_work.suggest_commit_message(agent)}'))
+            return 'handled'
+        cwd = str(getattr(agent, 'work_root', None) or Path.cwd())
+        print(mute(f'工作区: {cwd}'))
+        try:
+            confirm = input(warn('确认 git add -A 并 commit？输入 y 继续: ')).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            confirm = ''
+            print()
+        if confirm not in ('y', 'yes', '是'):
+            print(warn('已取消提交。'))
+            return 'handled'
+        md = git_work.commit_changes(message, cwd=cwd)
+        _print_agent_reply(md)
+        return 'handled'
+
+    if cmd in ('/push', '/git-push'):
+        cwd = str(getattr(agent, 'work_root', None) or Path.cwd())
+        print(mute(f'将执行: git push -u origin HEAD @ {cwd}'))
+        try:
+            confirm = input(warn('确认推送？输入 y 继续（不会 force）: ')).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            confirm = ''
+            print()
+        if confirm not in ('y', 'yes', '是'):
+            print(warn('已取消推送。'))
+            return 'handled'
+        md = git_work.push_branch(cwd=cwd)
+        _print_agent_reply(md)
+        return 'handled'
+
+    if cmd in ('/pr', '/pull-request'):
+        cwd = str(getattr(agent, 'work_root', None) or Path.cwd())
+        parts = arg.split(maxsplit=1)
+        draft = False
+        title = arg.strip()
+        if parts and parts[0].lower() == 'draft':
+            draft = True
+            title = parts[1].strip() if len(parts) > 1 else ''
+        if not title:
+            title = git_work.suggest_commit_message(agent)
+        body = ''
+        if getattr(agent, 'last_reply', None):
+            body = (agent.last_reply or '')[:4000]
+        print(mute(f'标题: {title}{"  (draft)" if draft else ""}'))
+        try:
+            confirm = input(warn('确认用 gh 创建 PR？输入 y 继续: ')).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            confirm = ''
+            print()
+        if confirm not in ('y', 'yes', '是'):
+            print(warn('已取消创建 PR。'))
+            return 'handled'
+        md = git_work.create_pull_request(title, body=body, cwd=cwd, draft=draft)
+        _print_agent_reply(md)
+        return 'handled'
+
+    if cmd == '/ship':
+        return _handle_ship(arg, agent)
 
     if cmd == '/model':
         ensure_home()
@@ -683,30 +807,115 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
             print(mute('可检查 Key/网络后重开对话，或 reviewagent config --wizard'))
         return 'handled'
 
+    if cmd in ('/skill', '/skills'):
+        from scripts.skill_runtime import format_skill_list, install_skill, list_skills
+        parts = arg.split(None, 1)
+        sub = (parts[0] if parts else 'list').lower()
+        rest = parts[1].strip() if len(parts) > 1 else ''
+        if sub in ('', 'list', 'ls'):
+            print(ok(format_skill_list(list_skills())))
+            loaded = getattr(agent, 'active_skills', None) or []
+            if loaded:
+                print(mute('本会话已加载: ' + ', '.join(s.get('name', '?') for s in loaded)))
+            return 'handled'
+        if sub in ('load', 'use', 'add') and rest:
+            print(ok(agent.attach_skill(rest.split()[0])))
+            return 'handled'
+        if sub == 'install' and rest:
+            name = rest.split()[0]
+            print(mute(f'正在安装官方 skill: {name} …'))
+            result = install_skill(name)
+            if result.get('ok'):
+                print(ok(f"已安装到 {result.get('path')}"))
+                print(mute(f"来源: {(result.get('meta') or {}).get('url', '')}"))
+                print(mute(f'接着: /skill load {name}'))
+            else:
+                print(warn(result.get('error') or '安装失败'))
+            return 'handled'
+        print(mute('用法: /skill list | /skill load <名> | /skill install torch-npu-pr-review'))
+        return 'handled'
+
+    if cmd == '/mcp':
+        from scripts.mcp_client import ensure_default_user_mcp, get_registry
+        ensure_default_user_mcp()
+        reg = agent.mcp_registry() if hasattr(agent, 'mcp_registry') else get_registry()
+        parts = arg.split(None, 2)
+        sub = (parts[0] if parts else '').lower()
+        if not sub or sub in ('list', 'ls'):
+            print(ok('MCP servers（内置 ascend-doc = 昇腾文档）'))
+            for s in reg.list_servers():
+                flag = 'disabled' if s.get('disabled') else 'on'
+                desc = s.get('description') or ''
+                print(mute(f"  • {s['name']} [{flag}] {s.get('command')} {' '.join(s.get('args') or [])}"))
+                if desc:
+                    print(mute(f'      {desc}'))
+            print(mute('用法: /mcp tools <server> · /mcp call <server> <tool> [json] · /mcp reload'))
+            return 'handled'
+        if sub == 'reload':
+            reg.reload()
+            print(ok('已重载 MCP 配置'))
+            return 'handled'
+        if sub == 'tools' and len(parts) >= 2:
+            info = reg.list_tools(parts[1])
+            if info.get('error'):
+                print(warn(info['error']))
+            else:
+                print(ok(f"MCP tools · {info.get('server')}"))
+                for t in info.get('tools') or []:
+                    print(mute(f"  • {t.get('name')}: {t.get('description') or ''}"))
+                if not info.get('tools'):
+                    print(mute('（无工具或启动失败；ascend-doc 需要 Node ≥ 22 + npx）'))
+            return 'handled'
+        if sub == 'call' and len(parts) >= 3:
+            server = parts[1]
+            rest = parts[2].strip()
+            # tool [json-args]
+            bits = rest.split(None, 1)
+            tool = bits[0]
+            args_obj = {}
+            if len(bits) > 1:
+                try:
+                    args_obj = json.loads(bits[1])
+                except json.JSONDecodeError:
+                    print(warn('arguments 必须是 JSON 对象'))
+                    return 'handled'
+            print(mute(f'MCP call {server}/{tool} …'))
+            result = reg.call(server, tool, args_obj if isinstance(args_obj, dict) else {})
+            print(json.dumps(result, ensure_ascii=False, indent=2)[:8000])
+            return 'handled'
+        print(mute('用法: /mcp | /mcp tools ascend-doc | /mcp call ascend-doc <tool> {} | /mcp reload'))
+        return 'handled'
+
     if cmd == '/help':
         print(brand('审核 / 质检怎么用'))
-        print(ok('0) 自动分流（默认，一般不用手切）'))
-        print(mute('   贴链接/社区任务正文 → 正式审查'))
-        print(mute('   好的/嗯/闲聊/无关问题 → 日常对话'))
-        print(mute('   「怎么改/下一步」→ 继续正式（沿用上下文）'))
-        print(mute('   可选钉住: /chat /work · 恢复自动: /mode auto · /clear 清空'))
+        print(ok('0) AI自动调换（默认）'))
+        print(mute('   闲聊↔正式审查自动切换；生产力: /fix→/commit→/push→/pr 或 /ship'))
+        print(mute('   钉住: /chat /work · 恢复调换: /mode auto'))
+        print(ok('0b) 多对话'))
+        print(mute('   /new [名字]  新开对话（旧的可 /back 返回）'))
+        print(mute('   /back        返回上一会话'))
+        print(mute('   /sessions    列表 · /resume 1 或 /resume 名字'))
+        print(ok('0c) Skills / MCP'))
+        print(mute('   /skill list|load <名>|install torch-npu-pr-review'))
+        print(mute('   /mcp  ·  /mcp tools ascend-doc  （内置昇腾文档 MCP）'))
         print(ok('1) 贴链接'))
         print(mute('   https://gitcode.com/Ascend/pytorch/issues/3135'))
+        print(mute('   https://gitcode.com/opengauss/Plugin/issues/…'))
         print(ok('2) 多行输入'))
         print(mute('   Win: 粘贴多行后 Enter 发送；Shift+Enter 换行'))
         print(mute('   或 /paste → 粘贴 → /send'))
         print(mute('   一次最多 20 个链接（REVIEWAGENT_MAX_URLS 可调）'))
         print(ok('3) 换模型'))
         print(mute('   /model  ·  /model MiniMax-M1  ·  reviewagent config --wizard'))
-        print(ok('4) 改补丁'))
-        print(mute('   /fix → y 或 /apply（不自动 push）'))
-        print(ok('5) 实用命令'))
-        print(mute('   /status /history /retry /export'))
-        print(mute('   /review [staged] [online] [operator|inference]  本地 Git 审查'))
-        print(mute('   /ci       解析上一条或参数中的 CI 失败日志'))
-        print(mute('   /checklist [标题]  社区任务验收清单'))
-        print(mute('   /compare  多 PR/Issue 对比表（需先贴 ≥2 个链接）'))
-        print(mute('   /save /resume /sessions · /sessions clean [N|all]'))
+        print(ok('4) 改补丁 → 真正落地'))
+        print(mute('   /fix → /apply → /commit "说明" → /push → /pr'))
+        print(mute('   一键引导: /ship "说明"（逐步确认，不 force）'))
+        print(ok('5) Git / SSH'))
+        print(mute('   /git status|diff|branch <名>|remote|ssh|test-ssh'))
+        print(mute('   /commit /push /pr [draft] [标题]'))
+        print(ok('6) 其它'))
+        print(mute('   /status /history /retry /export /review /ci /checklist /compare'))
+        print(mute('   /save /resume /sessions clean · /new /back'))
         print(mute('退出: exit / /exit / Ctrl+C（自动存会话）'))
         print(mute('/discard /context /sources /clear · /network auto|on|off'))
         return 'handled'
@@ -757,10 +966,10 @@ def chat(args: argparse.Namespace) -> int:
 
     if not args.message:
         if quiet:
-            print(mute('  /review 审diff · /ci 日志 · /compare 多链接 · /checklist 验收'))
-            print(mute('  /save /resume · /sessions clean · exit 自动存会话'))
-            print(mute('  Win: Shift+Enter换行 · /model · /paste'))
-            print(mute('  命令: /help /compare /review /ci /resume /model'))
+            print(mute('  模式: AI自动调换（默认）· /new 新开 · /back 返回旧对话'))
+            print(mute('  生产力: /fix→/apply→/commit→/push→/pr  或 /ship'))
+            print(mute('  /git · /sessions · /model · exit 自动存'))
+            print(mute('  命令: /help /new /back /ship /git /pr'))
         else:
             print(brand('ReviewAgent · Ascend AI Infra'))
             print(mute(f'config: {_default_config(args.config)}'))
@@ -829,6 +1038,99 @@ def _autosave_session(agent: ConversationAgent) -> None:
         print(warn(f'会话自动保存失败: {exc}'))
 
 
+def _handle_git_slash(arg: str, agent: ConversationAgent) -> str:
+    cwd = str(getattr(agent, 'work_root', None) or Path.cwd())
+    parts = (arg or '').split(maxsplit=1)
+    sub = (parts[0] if parts else '').lower()
+    rest = parts[1].strip() if len(parts) > 1 else ''
+
+    if not sub or sub in ('status', 'st'):
+        _print_agent_reply(git_work.status_report(cwd=cwd))
+        return 'handled'
+    if sub == 'diff':
+        staged = rest.strip().lower() in ('staged', '--staged', 'cached')
+        _print_agent_reply(git_work.diff_report(cwd=cwd, staged=staged))
+        return 'handled'
+    if sub in ('branch', 'co', 'checkout'):
+        if not rest:
+            print(warn('用法: /git branch <新分支名>'))
+            return 'handled'
+        _print_agent_reply(git_work.create_branch(rest, cwd=cwd))
+        return 'handled'
+    if sub == 'remote':
+        _print_agent_reply(git_work.remote_report(cwd=cwd))
+        return 'handled'
+    if sub == 'ssh':
+        _print_agent_reply(git_work.to_ssh_origin(cwd=cwd))
+        return 'handled'
+    if sub in ('test-ssh', 'ssh-test'):
+        _print_agent_reply(git_work.test_ssh())
+        return 'handled'
+    if sub == 'add':
+        paths = rest.split() if rest else None
+        r = git_work.stage_paths(paths, cwd=cwd)
+        print(ok('已暂存。') if r.get('ok') else warn(r.get('out') or '暂存失败'))
+        return 'handled'
+    if sub == 'help':
+        _print_agent_reply(git_work.format_cmd_help())
+        return 'handled'
+    print(warn(f'未知 /git 子命令: {sub}'))
+    print(mute('status|diff|branch|remote|ssh|test-ssh|add|help'))
+    return 'handled'
+
+
+def _handle_ship(arg: str, agent: ConversationAgent) -> str:
+    """Guided commit → push → pr with confirms (no force)."""
+    cwd = str(getattr(agent, 'work_root', None) or Path.cwd())
+    message = (arg or '').strip() or git_work.suggest_commit_message(agent)
+    print(ok('Ship 工作流（逐步确认，不 force）'))
+    print(mute(f'工作区: {cwd}'))
+    _print_agent_reply(git_work.status_report(cwd=cwd))
+
+    try:
+        c1 = input(warn(f'① 提交？说明=「{message}」 输入 y: ')).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        print(warn('已取消 ship。'))
+        return 'handled'
+    if c1 not in ('y', 'yes', '是'):
+        print(warn('已取消 ship。'))
+        return 'handled'
+    commit_md = git_work.commit_changes(message, cwd=cwd)
+    _print_agent_reply(commit_md)
+    if '已提交' not in commit_md:
+        return 'handled'
+
+    try:
+        c2 = input(warn('② 推送到 origin？输入 y: ')).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        print(warn('已提交但未推送。可稍后 /push'))
+        return 'handled'
+    if c2 not in ('y', 'yes', '是'):
+        print(mute('已跳过推送。可稍后 /push'))
+        return 'handled'
+    push_md = git_work.push_branch(cwd=cwd)
+    _print_agent_reply(push_md)
+    if '已推送' not in push_md:
+        return 'handled'
+
+    try:
+        c3 = input(warn(f'③ 创建 PR「{message}」？输入 y（draft 输入 d）: ')).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        print(warn('已推送但未开 PR。可稍后 /pr'))
+        return 'handled'
+    if c3 in ('d', 'draft'):
+        _print_agent_reply(git_work.create_pull_request(message, cwd=cwd, draft=True))
+    elif c3 in ('y', 'yes', '是'):
+        body = (getattr(agent, 'last_reply', None) or '')[:4000]
+        _print_agent_reply(git_work.create_pull_request(message, body=body, cwd=cwd, draft=False))
+    else:
+        print(mute('已跳过 PR。可稍后 /pr'))
+    return 'handled'
+
+
 def _acceptance_checklist(focus: str = '') -> str:
     """Community-task style acceptance checklist (ops / design / IT)."""
     title = focus or '社区任务'
@@ -867,7 +1169,7 @@ def main() -> int:
         prog="reviewagent",
         description="ReviewAgent — Ascend AI Infra 智能体（Hermes 风格唤醒）",
     )
-    parser.add_argument("--version", action="version", version="ReviewAgent 1.6.2")
+    parser.add_argument("--version", action="version", version="ReviewAgent 1.8.0")
     subparsers = parser.add_subparsers(dest="command")
 
     review_parser = subparsers.add_parser("review", help="审查当前 Git 工作区")
@@ -879,8 +1181,8 @@ def main() -> int:
     review_parser.add_argument("--max-diff", type=int, default=12000)
     review_parser.add_argument("--require-full", action="store_true",
                                help="diff 超出 --max-diff 时直接失败，不给出只覆盖部分改动的审查结果")
-    review_parser.add_argument("--scenario", choices=["operator", "inference"],
-                               help="加载专业 Agent：operator=算子社区任务，inference=推理部署；省略则自动判定，含糊时退回通用审查")
+    review_parser.add_argument("--scenario", choices=["operator", "inference", "opengauss"],
+                               help="加载专业 Agent：operator=算子，inference=推理，opengauss=openGauss 社区；省略则自动判定")
     review_parser.add_argument("--require-scenario", action="store_true",
                                help="自动判定含糊时返回 needs_context（退出码 2），不进行通用审查")
     review_parser.set_defaults(func=review)
@@ -896,6 +1198,14 @@ def main() -> int:
     search_parser.add_argument('--kind', choices=['issue', 'pr'])
     search_parser.add_argument('--json', action='store_true')
     search_parser.set_defaults(func=search)
+
+    collect_parser = subparsers.add_parser(
+        'collect', help='采集 GitCode 社区 issues/PRs/CI/审核对话（需 GITCODE_TOKEN）')
+    collect_parser.add_argument('--community', default='opengauss',
+                                help='社区 id，见 data/communities/*.json')
+    collect_parser.add_argument('--pages', type=int, default=2)
+    collect_parser.add_argument('--dialog-limit', type=int, default=20)
+    collect_parser.set_defaults(func=collect_cmd)
 
     chat_parser = subparsers.add_parser('chat', help='唤醒对话 Agent（默认命令）')
     chat_parser.add_argument('--config', default=None)

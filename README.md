@@ -12,9 +12,10 @@
 | Agent | 场景 |
 |-------|------|
 | [cann-op-checker](.cursor/agents/cann-op-checker.md) | AscendC 社区任务算子检查 / design.md / IT 五件套 |
-| [cann-inference-advisor](.cursor/agents/cann-inference-advisor.md) | 模型迁移、推理优化、服务部署、vLLM-Ascend |
+| [cann-inference-advisor](.cursor/agents/cann-inference-advisor.md) | 模型迁移、推理优化、服务部署、vLLM-Ascend、API 一致性 |
+| [opengauss-community-advisor](.cursor/agents/opengauss-community-advisor.md) | openGauss Plugin / docs / 师生审核与 CI |
 
-路由说明见 [AGENTS.md](AGENTS.md)。Skills 在 `.cursor/skills/`（镜像 `.agents/skills/`）。
+路由说明见 [AGENTS.md](AGENTS.md)。Skills 在 `.cursor/skills/`（镜像 `.agents/skills/`）。对话内 `/skill`、内置昇腾文档 MCP `/mcp`；社区采集 `reviewagent collect --community opengauss`。
 
 ---
 

@@ -13,6 +13,7 @@ from scripts.session_store import (
     load_session,
     save_session,
     serialize_agent,
+    start_new_conversation,
 )
 from scripts.context_compare import compare_contexts, format_compare_report
 
@@ -120,6 +121,27 @@ class CompareAndCleanTests(unittest.TestCase):
                 self.assertEqual(len(result['kept']), 2)
                 self.assertEqual(len(result['deleted']), 2)
                 self.assertEqual(len(list(sdir.glob('session-*.json'))), 2)
+
+    def test_new_then_back(self):
+        with tempfile.TemporaryDirectory() as td:
+            with patch('scripts.session_store.home_dir', return_value=Path(td)), \
+                    patch('scripts.session_store.ensure_home', return_value=Path(td)):
+                a = ConversationAgent(MagicMock(), MagicMock(), MagicMock())
+                a.history = [
+                    {'role': 'user', 'content': 'old-q'},
+                    {'role': 'assistant', 'content': 'old-a'},
+                ]
+                path = start_new_conversation(a, 'topic-a')
+                self.assertTrue(path.is_file())
+                self.assertEqual(a.history, [])
+                data = load_session('previous')
+                other = ConversationAgent(MagicMock(), MagicMock(), MagicMock())
+                apply_to_agent(other, data)
+                self.assertEqual(other.history[0]['content'], 'old-q')
+                rows = list_sessions()
+                self.assertTrue(any(r['name'] == 'topic-a' for r in rows))
+                by_idx = load_session('1')
+                self.assertIn('history', by_idx)
 
 
 if __name__ == '__main__':

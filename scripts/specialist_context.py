@@ -23,8 +23,19 @@ INFERENCE_CODE_HINTS = (
     'torch_npu', 'torch.npu', '.npu()', 'aclrt', 'aclinit', 'vllm_ascend',
     'vllm-ascend', 'ascendcl',
 )
+OPENGAUSS_PATH_HINTS = (
+    'opengauss', 'gaussdb', 'open_gauss',
+)
+OPENGAUSS_CODE_HINTS = (
+    'opengauss', 'gaussdb', 'sig/plugin', 'dolphin',
+)
+API_CONSISTENCY_HINTS = (
+    'api一致性', 'api 一致性', 'pytorch-ecosystem', 'api-consistency',
+    'torch-npu-pr-review', '一致性对齐',
+)
 # Too generic alone — never decide scenario by themselves.
 GENERIC_ONLY = {'cann', 'api', 'om', 'npu', 'ascend'}
+AMBUSH_QUESTION = '这是昇腾算子社区任务、昇腾推理部署，还是 openGauss？'
 
 MAX_CHARS = 16000
 MAX_BYTES = 32 * 1024
@@ -56,11 +67,17 @@ class SpecialistLoad:
 
 
 def _roots() -> List[Path]:
-    return [
+    roots = [
         PROJECT_ROOT / '.cursor',
         PROJECT_ROOT / '.agents',
         Path.home() / '.cursor',
     ]
+    try:
+        from scripts.agent_home import home_dir
+        roots.append(Path(home_dir()))  # ~/.reviewagent — /skill install 落点
+    except Exception:
+        pass
+    return roots
 
 
 def _find(rel: str) -> Optional[Path]:
@@ -118,8 +135,8 @@ def detect_scenario(
     paths: Optional[Sequence[str]] = None,
     explicit: Optional[str] = None,
 ) -> SpecialistLoad:
-    """Decide operator vs inference. Ambiguous → needs_context (do not guess)."""
-    if explicit in ('operator', 'inference'):
+    """Decide operator / inference / opengauss. Ambiguous → needs_context."""
+    if explicit in ('operator', 'inference', 'opengauss'):
         return SpecialistLoad(
             scenario=explicit,
             status='ready',
@@ -129,7 +146,7 @@ def detect_scenario(
         return SpecialistLoad(
             status='needs_context',
             reason=f'未知 --scenario={explicit!r}',
-            question='这是算子社区任务，还是推理部署？',
+            question=AMBUSH_QUESTION,
         )
 
     paths = list(paths or [])
@@ -137,29 +154,36 @@ def detect_scenario(
     blob = _evidence_blob(content)
     op_n, op_hits = _count_hits(blob, OPERATOR_PATH_HINTS, OPERATOR_CODE_HINTS, paths)
     inf_n, inf_hits = _count_hits(blob, INFERENCE_PATH_HINTS, INFERENCE_CODE_HINTS, paths)
+    og_n, og_hits = _count_hits(blob, OPENGAUSS_PATH_HINTS, OPENGAUSS_CODE_HINTS, paths)
 
-    if op_n and not inf_n:
+    sides = [(op_n, 'operator', op_hits), (inf_n, 'inference', inf_hits), (og_n, 'opengauss', og_hits)]
+    hit_sides = [(n, name, hits) for n, name, hits in sides if n]
+    if len(hit_sides) == 1:
+        n, name, hits = hit_sides[0]
         return SpecialistLoad(
-            scenario='operator',
+            scenario=name,
             status='ready',
-            reason='auto: ' + ', '.join(op_hits[:6]),
+            reason='auto: ' + ', '.join(hits[:6]),
         )
-    if inf_n and not op_n:
+    if len(hit_sides) > 1:
+        detail = '; '.join(f'{name}={hits[:3]}' for _, name, hits in hit_sides)
+        return SpecialistLoad(
+            status='needs_context',
+            reason=f'混合证据 {detail}',
+            question=AMBUSH_QUESTION,
+        )
+    # Soft hint: API consistency community → inference lane + skill note in loader
+    lower = blob + ' ' + ' '.join(paths).lower()
+    if any(h in lower for h in API_CONSISTENCY_HINTS):
         return SpecialistLoad(
             scenario='inference',
             status='ready',
-            reason='auto: ' + ', '.join(inf_hits[:6]),
-        )
-    if op_n and inf_n:
-        return SpecialistLoad(
-            status='needs_context',
-            reason=f'混合证据 op={op_hits[:4]} inference={inf_hits[:4]}',
-            question='这是算子社区任务，还是推理部署？',
+            reason='auto: api-consistency community keywords',
         )
     return SpecialistLoad(
         status='needs_context',
-        reason='无明确算子/推理证据',
-        question='这是算子社区任务，还是推理部署？',
+        reason='无明确算子/推理/openGauss 证据',
+        question=AMBUSH_QUESTION,
     )
 
 
@@ -203,22 +227,31 @@ def _append_budgeted(parts: List[str], piece: str, omitted: List[str], label: st
 
 def load_specialist_context(scenario: str) -> SpecialistLoad:
     """Load agent + required skills for a decided scenario."""
+    # (rel, section_ids, required) — required missing → incomplete; optional missing → warning only
     if scenario == 'operator':
         agent_rel = 'agents/cann-op-checker.md'
         skill_specs = [
-            ('skills/cann-ascendc-op-dev/SKILL.md', ['任务分型', '端到端', 'Agent 执行', '0.', '1.', '5.']),
-            ('skills/cann-ascendc-op-dev/pitfalls.md', ['SIMT', 'CI', 'hidevlab', 'Basic API']),
+            ('skills/cann-ascendc-op-dev/SKILL.md', ['任务分型', '端到端', 'Agent 执行', '0.', '1.', '5.'], True),
+            ('skills/cann-ascendc-op-dev/pitfalls.md', ['SIMT', 'CI', 'hidevlab', 'Basic API'], True),
         ]
     elif scenario == 'inference':
         agent_rel = 'agents/cann-inference-advisor.md'
         skill_specs = [
-            ('skills/common-issues-patterns/SKILL.md', ['§0', '§6']),
-            ('skills/model-migration/SKILL.md', ['§0', '§1', '§3', '§5']),
-            ('skills/inference-optimization/SKILL.md', ['§0', '§1', '§6']),
+            ('skills/common-issues-patterns/SKILL.md', ['§0', '§6'], True),
+            ('skills/model-migration/SKILL.md', ['§0', '§1', '§3', '§5'], True),
+            ('skills/inference-optimization/SKILL.md', ['§0', '§1', '§6'], True),
+            # Optional extras (missing/budget-skip must not mark incomplete)
+            ('skills/api-consistency-community/SKILL.md', ['§0', '§1', '§3'], False),
+            ('skills/torch-npu-pr-review/SKILL.md', ['使用方式', '审核', '红线', '报告'], False),
+        ]
+    elif scenario == 'opengauss':
+        agent_rel = 'agents/opengauss-community-advisor.md'
+        skill_specs = [
+            ('skills/opengauss-community/SKILL.md', ['§0', '§1', '§2', '§3', '§4'], True),
         ]
     else:
         return SpecialistLoad(status='needs_context', reason=f'未知场景 {scenario}',
-                              question='这是算子社区任务，还是推理部署？')
+                              question=AMBUSH_QUESTION)
 
     agent_path = _find(agent_rel)
     if not agent_path:
@@ -231,10 +264,13 @@ def load_specialist_context(scenario: str) -> SpecialistLoad:
     omitted: List[str] = []
     files_meta: List[Dict] = []
     parts: List[str] = []
+    hard_miss = False
 
     agent_text = agent_path.read_text(encoding='utf-8')
     agent_label = _source_label(agent_path)
     included = _append_budgeted(parts, f'# Specialist Agent\n{agent_text}\n', omitted, agent_label)
+    if not included:
+        hard_miss = True
     files_meta.append({
         'path': agent_label,
         'sha256': _sha256(agent_path),
@@ -242,16 +278,31 @@ def load_specialist_context(scenario: str) -> SpecialistLoad:
         'status': 'loaded' if included else 'omitted_budget',
     })
 
-    for rel, section_ids in skill_specs:
+    for rel, section_ids, required in skill_specs:
         path = _find(rel)
         if not path:
-            files_meta.append({'path': rel, 'role': 'skill', 'status': 'missing'})
-            omitted.append(f'missing:{rel}')
+            if required:
+                files_meta.append({'path': rel, 'role': 'skill', 'status': 'missing'})
+                omitted.append(f'missing:{rel}')
+                hard_miss = True
             continue
         body = _extract_sections(path.read_text(encoding='utf-8'), section_ids)
         label = _source_label(path)
         before = len(parts)
-        _append_budgeted(parts, f'\n# Skill: {label}\n{body}\n', omitted, label)
+        omitted_before = len(omitted)
+        ok = _append_budgeted(parts, f'\n# Skill: {label}\n{body}\n', omitted, label)
+        if not ok:
+            if required:
+                hard_miss = True
+                files_meta.append({
+                    'path': label, 'sha256': _sha256(path),
+                    'role': 'skill', 'status': 'omitted_budget',
+                })
+            else:
+                # optional budget skip: do not keep gap in omitted (keeps status ready)
+                while len(omitted) > omitted_before:
+                    omitted.pop()
+            continue
         files_meta.append({
             'path': label,
             'sha256': _sha256(path),
@@ -262,8 +313,8 @@ def load_specialist_context(scenario: str) -> SpecialistLoad:
     text = ''.join(parts)
     return SpecialistLoad(
         scenario=scenario,
-        status='incomplete' if omitted else 'ready',
-        reason='必要专业上下文未完整加载：' + ', '.join(omitted) if omitted else 'loaded',
+        status='incomplete' if hard_miss else 'ready',
+        reason=('必要专业上下文未完整加载：' + ', '.join(omitted)) if hard_miss else 'loaded',
         files=files_meta,
         omitted=omitted,
         text=text,

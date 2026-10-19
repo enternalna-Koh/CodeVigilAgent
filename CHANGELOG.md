@@ -2,6 +2,16 @@
 
 ---
 
+## v1.8.0 Skills / 昇腾 MCP / openGauss (2026-10-19)
+
+- 内置昇腾文档 MCP（`ascend-doc` / `ascend-doc-mcp`），对话 `/mcp`；调查循环支持 `mcp_call`
+- Skill 运行时：`/skill list|load|install`；可安装 pytorch-ecosystem 官方 `torch-npu-*` skill
+- 新增 `api-consistency-community`、`opengauss-community` skill 与 `opengauss-community-advisor` agent
+- `collect --community opengauss`：采集 issues/PRs、CI check-runs、老师/审核人对话
+- GitCode PR 实时拉取附带 CI 摘要；`--scenario opengauss`；路由问句含 openGauss
+
+---
+
 ## v1.6.2 更新复核修复 (2026-10-17)
 
 - 修复 /save 被导出截获、待应用补丁无法保存及恢复后写错工作目录；保存失败可见，同名会话优先于 cwd 文件
