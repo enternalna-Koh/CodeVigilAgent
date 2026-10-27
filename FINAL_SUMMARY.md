@@ -430,7 +430,7 @@ python scripts/build_training_dataset.py
 
 这个项目从一个简单的想法，发展成为业界最完整的昇腾 AI 智能审查系统。
 
-**ReviewAgent 已经准备好帮助开发者写出更好的代码！** 🚀
+**CodeVigilAgent 已经准备好帮助开发者写出更好的代码！** 🚀
 
 ---
 
