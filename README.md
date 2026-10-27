@@ -2,7 +2,7 @@
 
 专为昇腾 NPU / AI Infra 打造的智能体（Hermes 风格 CLI + Cursor Subagent）。
 
-仓库：[`enternalna-Koh/CodeVigilAgent`](https://github.com/enternalna-Koh/ReviewAgent)。
+仓库：[`enternalna-Koh/CodeVigilAgent`](https://github.com/enternalna-Koh/CodeVigilAgent)。
 
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
