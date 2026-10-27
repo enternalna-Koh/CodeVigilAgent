@@ -15,7 +15,7 @@
 | [cann-inference-advisor](.cursor/agents/cann-inference-advisor.md) | 模型迁移、推理优化、服务部署、vLLM-Ascend、API 一致性 |
 | [opengauss-community-advisor](.cursor/agents/opengauss-community-advisor.md) | openGauss Plugin / docs / 师生审核与 CI |
 
-路由说明见 [CodeVigil AGENTS.md](CodeVigil AGENTS.md)。Skills 在 `.cursor/skills/`（镜像 `.agents/skills/`）。对话内 `/skill`、内置昇腾文档 MCP `/mcp`；社区采集 `reviewagent collect --community opengauss`。
+路由说明见 [CodeVigilAGENTS.md](CodeVigilAGENTS.md)。Skills 在 `.cursor/skills/`（镜像 `.agents/skills/`）。对话内 `/skill`、内置昇腾文档 MCP `/mcp`；社区采集 `reviewagent collect --community opengauss`。
 
 ### Skills、MCP 与社区采集的使用边界
 
