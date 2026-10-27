@@ -1,4 +1,4 @@
-﻿# ReviewAgent - 智能代码审查助手
+﻿# CodeVigil Agent - 智能代码审查助手
 
 专为昇腾 NPU / AI Infra 打造的智能体（Hermes 风格 CLI + Cursor Subagent）。
 
