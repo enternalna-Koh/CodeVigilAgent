@@ -67,12 +67,15 @@
 | `desktop-app/win/app.py` | 桌面版入口，20 行 | 不动 |
 | `desktop-app/win/cvapp/shell.py` | 窗口骨架：侧边栏 + 工作区 | 一般不动 |
 | `desktop-app/win/cvapp/features/` | **桌面版功能注册表** | 加桌面功能只动这里 |
+| `desktop-app/win/cvapp/panels.py` | 右侧面板槽位：按需创建 / 显示隐藏 / 任务后刷新 | 加第二个右侧面板时 |
+| `desktop-app/win/cvapp/history_panel.py` | 历史会话面板（WorkBuddy 式列表 + 渲染对话） | 改历史回顾界面时 |
+| `desktop-app/win/cvapp/sessions.py` | 历史会话数据层：调 `sessions` 子命令 + 纯格式化（无 tkinter） | 改会话读取逻辑时 |
 | `desktop-app/win/cvapp/theme.py` | 颜色 / 字体 / 尺寸唯一来源 | 改配色时 |
 | `desktop-app/CodeVigilAgentApp.swift` | macOS 版（SwiftUI），模型下拉复用 CLI `model --list --json` | 改 Mac 界面时 |
 | `bin/` | Node 层 CLI（`reviewagent` 命令） | 加 npm 子命令时会 |
 | `launchers/` | 次要启动脚本 | 不动 |
 | `legacy/` | 已退役入口，只留档 | 不动 |
-| `tests/` | 回归测试（394 项 Python + 9 项 JS） | 每次加功能都要加 |
+| `tests/` | 回归测试（430 项 Python + 9 项 JS） | 每次加功能都要加 |
 
 ---
 
@@ -88,6 +91,9 @@
 
 ```
 功能
+├── 会话        ← 加对话 / 历史类功能放这里
+│   ├── 历史会话       Ctrl+H   （右侧面板）
+│   └── 新会话         Ctrl+N
 ├── 审查        ← 加审查类功能放这里
 │   ├── 审查当前改动   F5
 │   └── 离线审查       Shift+F5
@@ -111,6 +117,16 @@ FEATURES = [
     Feature(id='export.md', group='输出', label='导出 Markdown',
             handler=export_markdown, order=30),
 ]
+```
+
+**右侧面板也是功能**：给 `Feature` 传 `panel_factory=(parent, app) -> 控件`，
+按钮就变成「显示 / 隐藏面板」，shell 不用改。面板可选实现 `refresh()`，
+会在展开时和任务结束后被调用（历史会话就靠它更新轮次 / 预览）。
+
+```python
+# cvapp/features/history.py（节选）
+Feature(id='history.panel', group='会话', label='历史会话',
+        panel_factory=HistoryPanel, shortcut='<Control-h>'),
 ```
 
 程序启动时用 `pkgutil` 自动发现该目录下所有模块并读取 `FEATURES`。

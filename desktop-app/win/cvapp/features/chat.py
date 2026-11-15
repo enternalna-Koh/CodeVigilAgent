@@ -1,4 +1,9 @@
-"""提问功能：底部输入框提交。"""
+"""提问功能：底部输入框提交。
+
+两种情况：
+    普通提问 → 新起一次 `chat --message`（CLI 自己存会话）
+    历史会话已打开 → 追加 `--session <name>`，新消息写回那条会话
+"""
 from __future__ import annotations
 
 import os
@@ -25,7 +30,11 @@ def send(app, text: str) -> None:
         'chat', '--message', text, '--network', 'auto',
         '--session', app.chat_session, '--repository', repo,
     ]
-    app.run_cli(args, cwd=repo or ROOT, label='提问')
+    # CLI 一次性模式只打印回答、不回显提问；补一行，恢复的对话里才看得到
+    # 「我问了什么」，否则刷新后只剩 Agent 的回答。
+    app.append('\n● 你\n' + text + '\n\n', 'user')
+    label = '续写历史会话' if getattr(app, 'current_session', '') else '提问'
+    app.run_cli(args, cwd=repo or ROOT, label=label)
 
 
 FEATURES = [

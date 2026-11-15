@@ -58,7 +58,7 @@ FEATURES = [
 | 字段 | 说明 |
 |------|------|
 | `id` | 唯一标识，重复会被跳过并报错 |
-| `group` | 侧边栏分组：`审查` / `输出` / `系统`，新分组会自动追加到末尾 |
+| `group` | 侧边栏分组：`会话` / `审查` / `输出` / `系统`，新分组会自动追加到末尾 |
 | `label` | 按钮文字 |
 | `handler` | `handler(app)`；输入类功能是 `handler(app, text)` |
 | `order` | 同组排序，小的在上 |
@@ -67,6 +67,7 @@ FEATURES = [
 | `requires_repo` | True 时未选仓库会先弹提示，不会执行 |
 | `only_while_running` | True 时只在任务运行中可点（如「取消」） |
 | `shortcut` | tkinter 按键序列，如 `<F5>`、`<Control-s>` |
+| `panel_factory` | 给了它，按钮变成「显示 / 隐藏右侧面板」，见场景五 |
 
 ### 第 3 步：加测试（可选但推荐）
 
@@ -195,6 +196,35 @@ argument-hint: <文件路径>
 - 命名冲突不会抢占内置命令（`/help`、`/review` 等始终优先）
 
 > 正文里可以写 `@文件`，执行时会自动附带文件内容——和第 1 步的组合是常用玩法。
+
+---
+
+## 场景五：加一个右侧面板
+
+面板不是弹窗，是在主区域右边「推出来」的一列（历史会话就是这么做的）。
+仍然是新建一个文件，仍然不用改 shell：
+
+```python
+# cvapp/features/history.py（简化）
+from ..history_panel import HistoryPanel
+from .base import Feature
+
+FEATURES = [
+    Feature(id='history.panel', group='会话', label='历史会话',
+            panel_factory=HistoryPanel, shortcut='<Control-h>'),
+]
+```
+
+约定：
+
+| 约定 | 说明 |
+|------|------|
+| 构造函数 | `panel_factory(parent, app) -> tk 控件`，parent 是固定宽度的槽位 |
+| 可选 `refresh()` | 展开面板时、以及每次任务结束都会调用（用来刷新列表） |
+| 数据层单独放 | 别在控件里拼 `subprocess`，照 `cvapp/sessions.py` 那样抽一层纯逻辑再测 |
+| 同时只显示一个 | `PanelHost` 会自动收起上一个面板，按钮再点一次收起 |
+
+---
 
 ---
 

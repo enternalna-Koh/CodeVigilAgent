@@ -31,7 +31,7 @@ class Runner:
         return self._proc is not None and self._proc.poll() is None
 
     # ------------------------------------------------------------ 控制
-    def start(self, args: list, cwd: str, label: str) -> bool:
+    def start(self, args: list, cwd: str, label: str, columns: int | None = None) -> bool:
         if self.busy:
             return False
 
@@ -42,6 +42,10 @@ class Runner:
         # Text 组件里没有终端光标，定位序列（\x1b[75C）只会显示成乱码，
         # 所以桌面版强制走「补空格对齐」那条渲染路径。
         env['REVIEWAGENT_RENDER'] = 'pad'
+        # 按输出区实际像素宽度告诉 CLI 用多少列，避免边框比面板还宽、
+        # 底部常驻一条横向滚动条。
+        if columns:
+            env['COLUMNS'] = str(int(columns))
         creation = 0x08000000 if os.name == 'nt' else 0   # CREATE_NO_WINDOW
 
         try:

@@ -14,6 +14,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 from . import VERSION, config, theme
+from .panels import PanelHost
 from .runner import Runner
 from .widgets import FlatButton, OutputPane, divider, section_label
 
@@ -30,6 +31,9 @@ class Shell:
         self.status_var = tk.StringVar(value='就绪')
         self.font_ui = theme.ui_font(11)
         self.font_mono = theme.pick_mono_font(root, 12)
+        # 当前打开的历史会话（空 = 新会话）。由功能层写，chat 发送时读。
+        self.current_session = ''
+        self.session_title = ''
 
         self.runner = Runner(root, self.append, self._on_start, self._on_done)
 
@@ -114,6 +118,12 @@ class Shell:
         main.grid_columnconfigure(0, weight=1)
         main.grid_rowconfigure(1, weight=1)              # 输出区吃掉多余高度
 
+        # 右侧面板列：默认不占位，功能按钮展开时才出现
+        self.panel_host = PanelHost(main, self)
+        self.panel_host.frame.grid(row=0, column=2, rowspan=3, sticky='ns',
+                                   padx=(theme.GAP, 0))
+        self.panel_host.frame.grid_remove()
+
         # ---- 仓库行 ----
         repo_row = tk.Frame(main, bg=theme.BG)
         repo_row.grid(row=0, column=0, sticky='ew')
@@ -157,12 +167,32 @@ class Shell:
         return ordered + [g for g in dict.fromkeys(seen) if g not in ordered]
 
     def _invoke(self, feature) -> None:
+        if feature.panel_factory is not None:
+            self.panel_host.toggle(feature)
+            return
         if feature.requires_repo and not self.require_repo():
             return
         try:
             feature.handler(self)
         except Exception as exc:                       # noqa: BLE001
             self.append(f'\n[{feature.label}] 出错：{exc}\n', 'err')
+
+    @property
+    def panels(self) -> dict:
+        """已创建的右侧面板（id → 控件），供功能模块按需取用。"""
+        return self.panel_host.panels
+
+    def reset_session(self, clear_output: bool = False) -> None:
+        """结束当前历史会话：之后的提问会写进新会话，不再追加到旧的。"""
+        self.current_session = ''
+        self.session_title = ''
+        # chat_session 由 features/chat.py 读写；一起清掉，下一次提问才会新起一条
+        self.chat_session = None
+        self.chat_repository = None
+        if clear_output:
+            self.output.clear()
+            self.append('── 新会话 ──\n', 'accent')
+        self.set_status('就绪')
 
     def submit(self) -> None:
         text = self.entry.get().strip()
@@ -216,7 +246,8 @@ class Shell:
             config.save_last_repo(path)
 
     def run_cli(self, args: list, cwd: str, label: str) -> None:
-        if not self.runner.start(args, cwd, label):
+        columns = self.output.columns()
+        if not self.runner.start(args, cwd, label, columns=columns):
             messagebox.showinfo('正在运行', '上一个任务还没结束，先点「取消任务」或等它跑完。',
                                 parent=self.root)
 
@@ -234,6 +265,9 @@ class Shell:
             self.append(f'\n── 结束（退出码 {code}）──\n', 'err')
             self.set_status(f'结束，退出码 {code}')
         self._toggle_running_buttons(False)
+        # 面板里的会话列表跟着任务结果更新（轮次 / 预览变了）。
+        # 只刷列表，不动正在显示的对话内容。
+        self.panel_host.refresh_visible()
 
     def _toggle_running_buttons(self, running: bool) -> None:
         for feature in self.features:

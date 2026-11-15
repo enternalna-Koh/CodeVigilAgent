@@ -17,10 +17,17 @@ ACCENT = '#5eead4'
 ACCENT_DIM = '#2dd4bf'
 DANGER = '#f87171'
 
+# 历史会话面板与消息角色
+ROLE_USER = '#7dd3fc'       # 用户提问（蓝）
+ROLE_AGENT = ACCENT         # Agent 回复（青绿，与强调色一致）
+PANEL_HOVER = '#1b1f28'     # 历史列表悬停底色
+SELECTED = '#212634'        # 历史列表选中底色
+
 # ---------------------------------------------------------------- 尺寸
 PAD_OUTER = 16         # 窗口外边距
 GAP = 10               # 区块之间的垂直间距
 SIDEBAR_WIDTH = 176    # 侧边栏宽度（像素）
+PANEL_WIDTH = 360      # 右侧历史会话面板宽度（像素）
 
 # ---------------------------------------------------------------- 字体
 UI_FAMILY = 'Microsoft YaHei UI'

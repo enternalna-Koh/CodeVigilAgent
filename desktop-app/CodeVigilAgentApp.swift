@@ -17,6 +17,7 @@ private struct HistoryRow {
     let title: String
     let summary: String
     let updatedAt: String
+    let turns: Int
     let repository: String
     let status: String
 
@@ -25,53 +26,74 @@ private struct HistoryRow {
         title = data["title"] as? String ?? name
         summary = data["summary"] as? String ?? ""
         updatedAt = data["saved_at"] as? String ?? ""
+        // CLI 的 list_sessions 把 turns 统一 str() 成字符串返回；顺手接住数字形态，容错为 0
+        if let number = data["turns"] as? Int {
+            turns = number
+        } else {
+            turns = Int(data["turns"] as? String ?? "") ?? 0
+        }
         repository = data["repository"] as? String ?? ""
         status = data["status"] as? String ?? "completed"
     }
 }
 
+// 历史列表单条样式（对齐设计稿）：
+//   第一行 主标题：会话标题（或首个用户提问）截断到 28 字，尾部 …
+//   第二行 副标题：日期 + 参与轮次，如「2026-11-13 · 4 轮」
+//   第三行 预览：最后一条消息内容截断到 60 字（CLI 的 summary 已按
+//          「最后一条非空消息」取值，成功会话即最后一条 Agent 回复；
+//          失败会话自然回退成最后一条用户提问），完整时间放 toolTip
 private final class HistoryCell: NSTableCellView {
     private let title = NSTextField(labelWithString: "")
-    private let updatedAt = NSTextField(labelWithString: "")
-    private let summary = NSTextField(wrappingLabelWithString: "")
+    private let subtitle = NSTextField(labelWithString: "")
+    private let preview = NSTextField(labelWithString: "")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        let header = NSStackView(views: [title, updatedAt])
-        header.orientation = .horizontal
-        header.alignment = .centerY
-        header.spacing = 6
         title.font = .systemFont(ofSize: 12, weight: .semibold)
         title.lineBreakMode = .byTruncatingTail
-        updatedAt.font = .systemFont(ofSize: 10)
-        updatedAt.textColor = .secondaryLabelColor
-        updatedAt.alignment = .right
-        summary.font = .systemFont(ofSize: 11)
-        summary.textColor = .secondaryLabelColor
-        summary.lineBreakMode = .byTruncatingTail
-        summary.maximumNumberOfLines = 2
-        [header, summary].forEach {
+        subtitle.font = .systemFont(ofSize: 10)
+        subtitle.textColor = .secondaryLabelColor
+        subtitle.lineBreakMode = .byTruncatingTail
+        preview.font = .systemFont(ofSize: 11)
+        preview.textColor = .secondaryLabelColor
+        preview.lineBreakMode = .byTruncatingTail
+        [title, subtitle, preview].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             addSubview($0)
         }
         NSLayoutConstraint.activate([
-            header.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            header.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            header.topAnchor.constraint(equalTo: topAnchor, constant: 7),
-            summary.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            summary.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            summary.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 4),
-            summary.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -5),
+            title.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            title.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            title.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            subtitle.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            subtitle.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            subtitle.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 3),
+            preview.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            preview.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            preview.topAnchor.constraint(equalTo: subtitle.bottomAnchor, constant: 3),
+            preview.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -5),
         ])
     }
 
     required init?(coder: NSCoder) { nil }
 
     func configure(_ row: HistoryRow) {
-        title.stringValue = row.title
-        summary.stringValue = row.summary.isEmpty ? "（空对话）" : row.summary
-        updatedAt.stringValue = String(row.updatedAt.replacingOccurrences(of: "T", with: " ").prefix(16))
-        toolTip = "\(row.repository)\n\(row.status)"
+        title.stringValue = row.title.count > 28 ? String(row.title.prefix(28)) + "…" : row.title
+        let date = String(row.updatedAt.replacingOccurrences(of: "T", with: " ").prefix(10))
+        subtitle.stringValue = row.turns > 0 ? "\(date) · \(row.turns) 轮" : date
+        if row.summary.isEmpty {
+            preview.stringValue = "（空对话）"
+        } else {
+            preview.stringValue = row.summary.count > 60
+                ? String(row.summary.prefix(60)) + "…" : row.summary
+        }
+        toolTip = "\(row.title)\n\(row.updatedAt)\n\(row.repository)\n\(row.status)"
+    }
+
+    /// 仿 WorkBuddy 历史下拉：当前选中的会话标题用主色，其余行标题灰色。
+    func setEmphasized(_ emphasized: Bool) {
+        title.textColor = emphasized ? .labelColor : .secondaryLabelColor
     }
 }
 
@@ -315,7 +337,7 @@ private final class ModelSettingsForm: NSObject, NSTextFieldDelegate {
                 providerPopup.selectItem(at: 0)
             }
             populateModels(for: selectedEntry(), preferred: existingModel)
-            hintLabel.stringValue = "模型清单来自终端 CLI（\(catalog.entries.count) 个厂商）。"
+            hintLabel.stringValue = ""   // 平时不摆说明文字，只在出错时占位
             hintLabel.textColor = .secondaryLabelColor
         } else {
             // 读不到清单 → 手动输入模式，原有配置原样保留
@@ -354,6 +376,11 @@ private final class ModelSettingsForm: NSObject, NSTextFieldDelegate {
     func showHint(_ text: String, color: NSColor = .systemRed) {
         hintLabel.stringValue = text
         hintLabel.textColor = color
+    }
+
+    /// 问题解决了就把这一行收回去，别让它常驻在界面上
+    func hideHint() {
+        hintLabel.stringValue = ""
     }
 
     private func selectedEntry() -> ModelCatalogEntry? {
@@ -910,7 +937,6 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
         let form = ModelSettingsForm(existing: existing, load: load)
         let alert = NSAlert()
         alert.messageText = "模型设置"
-        alert.informativeText = "API Key 保存在本机 \(configURL.path)。"
         alert.accessoryView = form.grid
         alert.addButton(withTitle: "保存")
         alert.addButton(withTitle: "取消")
@@ -1112,21 +1138,32 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
             HistoryCell(frame: .zero)
         cell.identifier = identifier
         cell.configure(historyRows[row])
+        cell.setEmphasized(tableView.selectedRowIndexes.contains(row))
         return cell
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let table = notification.object as? NSTableView else { return }
+        // 仿 WorkBuddy：选中行标题深色，其余灰色（复用可见行的 cell，避免整表刷新）
+        table.enumerateAvailableRowViews { rowView, row in
+            (rowView.view(atColumn: 0) as? HistoryCell)?
+                .setEmphasized(table.selectedRowIndexes.contains(row))
+        }
         guard !suppressHistorySelection,
-              let table = notification.object as? NSTableView,
               historyRows.indices.contains(table.selectedRow) else { return }
         openSession(historyRows[table.selectedRow].name)
     }
 
-    private func renderConversation() {
+    /// restoredAt 非空时在顶部追加「恢复时间」一行（打开历史会话时传入）。
+    private func renderConversation(restoredAt: String? = nil) {
         outputView.string = ""
         appendOutput("\(currentTitle)\n", color: NSColor(calibratedRed: 0.48, green: 0.92, blue: 0.78, alpha: 1), bold: true)
         let repository = repositoryField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        appendOutput("仓库：\(repository.isEmpty ? "未关联" : repository)\n\n", color: .secondaryLabelColor)
+        appendOutput("仓库：\(repository.isEmpty ? "未关联" : repository)\n", color: .secondaryLabelColor)
+        if let restoredAt = restoredAt, !restoredAt.isEmpty {
+            appendOutput("恢复时间：\(restoredAt)\n", color: .secondaryLabelColor)
+        }
+        appendOutput("\n")
         for message in currentMessages {
             let role = message["role"] as? String ?? ""
             let content = message["content"] as? String ?? ""
@@ -1147,6 +1184,12 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
                 appendOutput(content + "\n\n")
             }
         }
+        // 打开历史会话后自动滚到最新一条消息：先确保长文本排版完成再滚动，
+        // 否则超长会话可能停在中间位置
+        if let container = outputView.textContainer {
+            outputView.layoutManager?.ensureLayout(for: container)
+        }
+        outputView.scrollRangeToVisible(NSRange(location: (outputView.string as NSString).length, length: 0))
     }
 
     @objc private func clearDisplay() {
@@ -1277,9 +1320,10 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
         process.environment = backendEnvironment()
 
         switch task {
-        case .chat(let prompt, _):
-            appendOutput("你\n", color: NSColor(calibratedRed: 0.48, green: 0.92, blue: 0.78, alpha: 1), bold: true)
-            appendOutput(prompt + "\n\n")
+        case .chat:
+            // 用户消息已在 sendPrompt 里随 renderConversation 渲染过一次，
+            // 这里再追加会出现两条「你 + 提问」，所以不再重复输出
+            break
         case .review, .sessionsList(_), .sessionShow(_), .sessionRename(_, _), .sessionDelete(_), .sessionExport(_, _):
             if case .review = task {
                 appendOutput(offlineReviewHeading(arguments) + "\n", color: NSColor(calibratedRed: 0.48, green: 0.92, blue: 0.78, alpha: 1), bold: true)
@@ -1419,8 +1463,21 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
                 setStatus("历史读取失败")
                 return
             }
-            historyRows = sessions.map(HistoryRow.init)
+            // 跳过两类噪音，避免点开必然是空壳或必然报错：
+            //   ① 损坏文件——CLI 降级成空壳行（标题退化为文件名、无时间/轮次/预览）
+            //   ② 空会话——终端退出时 CLI 会自动保存一份 0 轮无内容的会话
+            historyRows = sessions.map(HistoryRow.init).filter { row in
+                !(row.turns == 0 && row.summary.isEmpty)
+            }
             historyTableView.reloadData()
+            // 刷新后把选中行恢复到正在查看的会话（不重新拉取内容，避免覆盖当前显示）
+            if let current = currentSessionName,
+               let row = historyRows.firstIndex(where: { $0.name == current }),
+               historyTableView.selectedRow != row {
+                suppressHistorySelection = true
+                historyTableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                suppressHistorySelection = false
+            }
             if let name = openSessionAfterRefresh {
                 openSessionAfterRefresh = nil
                 openSession(name)
@@ -1428,15 +1485,26 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
                 setStatus(statusAfterHistoryRefresh ?? "历史已更新")
                 statusAfterHistoryRefresh = nil
             }
-        case .sessionShow:
-            guard status == 0,
-                  let payload = try? JSONSerialization.jsonObject(with: stdout) as? [String: Any],
+        case .sessionShow(let requestedName):
+            let parsed = (try? JSONSerialization.jsonObject(with: stdout)) as? [String: Any]
+            guard status == 0, let payload = parsed,
                   payload["ok"] as? Bool == true,
                   let session = payload["session"] as? [String: Any],
                   let name = session["name"] as? String,
                   let messages = session["messages"] as? [[String: Any]] else {
-                appendOutput("\n无法恢复这条本地对话。\n", color: .systemRed)
+                // 打开失败：给出明确原因（CLI 错误信息优先，其次 stderr 诊断），不崩溃；
+                // 列表与正在显示的会话内容都不动，只把选中行回退到当前会话
+                let reason = (parsed?["error"] as? String) ?? safeDiagnostic(stderr)
+                appendOutput("\n无法恢复对话「\(requestedName)」：\(reason)\n", color: .systemRed)
                 setStatus("历史恢复失败")
+                suppressHistorySelection = true
+                if let current = currentSessionName,
+                   let row = historyRows.firstIndex(where: { $0.name == current }) {
+                    historyTableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                } else {
+                    historyTableView.deselectAll(nil)
+                }
+                suppressHistorySelection = false
                 return
             }
             currentSessionName = name
@@ -1447,7 +1515,9 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
             sessionRepository = repository
             if !repository.isEmpty { UserDefaults.standard.set(repository, forKey: "lastRepositoryPath") }
             if name.hasPrefix("desktop-") { sessionID = String(name.dropFirst("desktop-".count)) }
-            renderConversation()
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd HH:mm"
+            renderConversation(restoredAt: formatter.string(from: Date()))
             suppressHistorySelection = true
             if let row = historyRows.firstIndex(where: { $0.name == name }) {
                 historyTableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
