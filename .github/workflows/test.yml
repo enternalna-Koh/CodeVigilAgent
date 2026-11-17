@@ -7,10 +7,11 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     env:
-      REVIEWAGENT_HOME: ${{ runner.temp }}/reviewagent-tests
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v4
+      - name: Set test home
+        run: echo "REVIEWAGENT_HOME=$RUNNER_TEMP/reviewagent-tests" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
