@@ -562,9 +562,11 @@ class App(tk.Tk):
                 self._last_user_row = row
                 self._render_user_status(row, message)
             elif role == "output":
+                # 审查/离线审查的结果用等宽字体（Consolas）+ 比正文（雅黑 12）
+                # 小一号的字号：肉眼一照面就能和主聊天分开，字号又足够大到读着不累。
                 label = tk.Label(row, text=message["content"], bg=BG, fg=AGENT_INK,
-                                 font=ui_mono(10), justify="left", anchor="w",
-                                 wraplength=self.agent_wrap())
+                                 font=ui_mono(11), justify="left", anchor="w",
+                                 wraplength=self.agent_wrap(), pady=6)
                 label.pack(fill="x", padx=12)
                 self._outputs.append(label)
             else:
