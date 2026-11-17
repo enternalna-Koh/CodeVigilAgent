@@ -362,15 +362,7 @@ class App(tk.Tk):
         RoundButton(ops, "模型设置", self.open_settings, bg=BG).pack(side="left", padx=(8, 0))
 
     def _build_transcript(self, parent):
-        # 会话头：加粗标题 + 仓库路径（与截图一致）
-        header = tk.Frame(parent, bg=BG)
-        header.pack(fill="x", pady=(10, 0))
-        tk.Label(header, textvariable=self.session_title_var, bg=BG, fg=INK,
-                 font=ui_font(13, True), anchor="w").pack(fill="x")
-        tk.Label(header, textvariable=self.session_repo_var, bg=BG, fg=FAINT,
-                 font=ui_font(9), anchor="w").pack(fill="x", pady=(2, 0))
-        self._set_session_header("CodeVigil Agent", f"仓库：{self.repo_var.get()}")
-
+        # 会话标题头已移除：该区域让给消息区，会话名/状态由底部状态栏与历史侧栏体现。
         frame = tk.Frame(parent, bg=BG)
         frame.pack(fill="both", expand=True, pady=(10, 0))
         self.transcript = ScrollArea(frame, bg=BG)
