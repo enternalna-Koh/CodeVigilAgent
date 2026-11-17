@@ -31,6 +31,14 @@ BUDGETS = {
     'scripts/conversation_agent.py': 920,
     'scripts/term_frame.py': 620,
     'desktop-app/win/cvapp/shell.py': 300,
+    'desktop-app/win/cvapp/runner.py': 200,
+    'desktop-app/win/cvapp/lifecycle.py': 80,
+    'desktop_py/app.py': 1000,
+    'desktop_py/cli_runtime.py': 250,
+    'desktop_py/session_controller.py': 400,
+    'desktop_py/settings_dialog.py': 380,
+    'scripts/gateway_key.py': 80,
+    'scripts/patch_paths.py': 380,
 }
 
 # 单个函数的行数上限（针对「什么都往里塞」的重灾区）
@@ -82,11 +90,27 @@ class LayeringTests(unittest.TestCase):
 
     def test_desktop_layer_is_standalone(self):
         offenders = []
-        for path in (ROOT / 'desktop-app/win/cvapp').rglob('*.py'):
-            text = path.read_text(encoding='utf-8', errors='replace')
-            if FORBIDDEN_IMPORT.search(text):
-                offenders.append(str(path.relative_to(ROOT)))
+        for directory in ('desktop-app/win/cvapp', 'desktop_py'):
+            for path in (ROOT / directory).rglob('*.py'):
+                text = path.read_text(encoding='utf-8', errors='replace')
+                if FORBIDDEN_IMPORT.search(text):
+                    offenders.append(str(path.relative_to(ROOT)))
         self.assertEqual(offenders, [], f'桌面层不应依赖 CLI 入口: {offenders}')
+
+
+    def test_desktop_capabilities_do_not_import_window_entry(self):
+        for name in ('cli_runtime.py', 'session_controller.py', 'settings_dialog.py'):
+            path = ROOT / 'desktop_py' / name
+            tree = ast.parse(path.read_text(encoding='utf-8'))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    modules = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    modules = [node.module or '']
+                else:
+                    continue
+                self.assertFalse(any(module in ('app', 'desktop_py.app') for module in modules),
+                                 f'{name} 不能反向依赖桌面入口')
 
 
 class SlashRegistryTests(unittest.TestCase):

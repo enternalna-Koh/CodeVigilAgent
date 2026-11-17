@@ -2,6 +2,7 @@
 import argparse
 import io
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -26,7 +27,7 @@ class BinaryCoverageTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
         self.git('init')
-        self.name = '资料 with\ttab.dat'
+        self.name = '资料 with spaces.dat' if os.name == 'nt' else '资料 with\ttab.dat'
         (self.root / self.name).write_bytes(b'\x00old')
         (self.root / 'a.py').write_text('x = 1\n', encoding='utf-8')
         self.git('add', '.')

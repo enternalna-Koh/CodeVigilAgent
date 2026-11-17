@@ -17,13 +17,11 @@ def toggle_history(app) -> None:
 
 
 def new_session(app) -> None:
-    app.reset_session(clear_output=True)
+    if not app.reset_session(clear_output=True):
+        return
     panel = app.panels.get('history.panel')
     if panel is None:
         return
-    reset = getattr(panel, 'reset_selection', None)
-    if callable(reset):
-        reset()
     refresh = getattr(panel, 'refresh', None)
     if callable(refresh):
         refresh()

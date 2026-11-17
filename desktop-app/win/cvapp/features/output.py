@@ -8,6 +8,10 @@ def _clear(app) -> None:
     if app.runner.busy:
         app.append('\n任务运行中，请先取消或等任务结束后再开始新对话。\n', 'err')
         return
+    reset = getattr(app, 'reset_session', None)
+    if callable(reset):
+        reset(clear_output=True)
+        return
     app.chat_session = None
     app.chat_repository = None
     app.output.clear()

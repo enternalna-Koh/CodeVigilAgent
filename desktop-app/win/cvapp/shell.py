@@ -17,11 +17,12 @@ from . import VERSION, config, theme
 from .action_bar import build_input_actions, build_toolbar
 from .chat_section import ChatSection
 from .panels import PanelHost
+from .lifecycle import ShellLifecycle
 from .runner import Runner
 from .features.base import group_order
 from .widgets import FlatButton, OutputPane, PillButton, caption_label, divider, section_label
 
-class Shell:
+class Shell(ShellLifecycle):
     def __init__(self, root: tk.Tk, features: list, load_errors: list[str] | None = None):
         self.root = root
         self.features = features
@@ -36,7 +37,9 @@ class Shell:
         # 当前打开的历史会话（空 = 新会话）。由功能层写，chat 发送时读。
         self.current_session = ''
         self.session_title = ''
+        self._session_generation = 0
         self.runner = Runner(root, self.append, self._on_start, self._on_done)
+        root.protocol('WM_DELETE_WINDOW', self.close)
 
         root.title('CodeVigil Agent')
         root.geometry('1200x860')
@@ -180,19 +183,6 @@ class Shell:
         """已创建的右侧面板（id → 控件），供功能模块按需取用。"""
         return self.panel_host.panels
 
-    def reset_session(self, clear_output: bool = False) -> None:
-        """结束当前历史会话：之后的提问会写进新会话，不再追加到旧的。"""
-        self.current_session = ''
-        self.session_title = ''
-        # chat_session 由 features/chat.py 读写；一起清掉，下一次提问才会新起一条
-        self.chat_session = None
-        self.chat_repository = None
-        if clear_output:
-            self.output.clear()
-            self.chat.clear()
-            self.append('── 新会话 ──\n', 'accent')
-        self.set_status('就绪')
-
     def submit(self) -> None:
         text = self.entry.get().strip()
         if not text:
@@ -252,6 +242,7 @@ class Shell:
 
     # ------------------------------------------------------------ 运行状态
     def _on_start(self, label: str) -> None:
+        self._session_generation += 1
         self.append(f'\n── {label} ' + '─' * 40 + '\n', 'accent')
         self.set_status(f'{label} 运行中…')
         self._toggle_running_buttons(True)

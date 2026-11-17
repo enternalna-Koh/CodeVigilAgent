@@ -203,6 +203,188 @@ class DesktopChatTests(unittest.TestCase):
         self.assertNotIn('secret-test-key', output.getvalue())
 
 
+class ChatRoutingRegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.home = self.root / 'home'
+        self.home.mkdir()
+        self.addCleanup(patch.stopall)
+        patch.dict(os.environ, {
+            'HOME': str(self.root), 'USERPROFILE': str(self.root),
+            'REVIEWAGENT_HOME': str(self.home),
+            'REVIEWAGENT_CONFIG': str(self.home / 'unused.json'),
+            'AI_API_KEY': '', 'OPENAI_API_KEY': '', 'ANTHROPIC_API_KEY': '',
+            'GITHUB_TOKEN': '', 'GITCODE_TOKEN': '',
+        }).start()
+        patch('socket.socket.connect', side_effect=AssertionError('测试禁止联网')).start()
+        patch('urllib.request.urlopen', side_effect=AssertionError('测试禁止联网')).start()
+        patch('ascend_cli.ensure_utf8_stdio').start()
+        patch('ascend_cli.enable_windows_ansi').start()
+        patch('ascend_cli.begin_think').start()
+        patch('ascend_cli.end_think').start()
+        patch('ascend_cli.think_progress').start()
+        patch('scripts.conversation_agent.KnowledgeSearch', return_value=FakeKnowledge()).start()
+        self.model = FakeModel()
+        patch.object(ascend_cli, 'get_ai_client', return_value=self.model).start()
+        patch('scripts.conversation_agent.ConversationAgent.investigate', return_value=[]).start()
+        self.fetch = patch('scripts.conversation_agent.ContextFetcher.fetch_url',
+                           return_value={'error': '不支持此链接'}).start()
+
+    def send(self, message, network=None, session=None):
+        argv = ['ascend_cli.py', 'chat', '--message', message, '--json',
+                '--repository', str(self.root)]
+        if network is not None:
+            argv.extend(['--network', network])
+        if session:
+            argv.extend(['--session', session])
+        output = io.StringIO()
+        with patch('sys.argv', argv), contextlib.redirect_stdout(output):
+            status = ascend_cli.main()
+        return status, json.loads(output.getvalue())
+
+    def seed_session(self, network):
+        sessions = self.home / 'sessions'
+        sessions.mkdir(exist_ok=True)
+        path = sessions / 'routing.json'
+        path.write_text(json.dumps({'network': network, 'work_root': str(self.root),
+                                    'history': [], 'contexts': []}), encoding='utf-8')
+        return path
+
+    def test_explicit_network_overrides_saved_mode_and_is_saved(self):
+        for saved in ('auto', 'on', 'off'):
+            for explicit in ('auto', 'on', 'off'):
+                with self.subTest(saved=saved, explicit=explicit):
+                    path = self.seed_session(saved)
+                    self.assertEqual(self.send('hello', explicit, 'routing')[0], 0)
+                    self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['network'], explicit)
+
+    def test_omitted_network_restores_saved_mode(self):
+        for saved in ('auto', 'on', 'off'):
+            with self.subTest(saved=saved):
+                path = self.seed_session(saved)
+                self.assertEqual(self.send('hello', session='routing')[0], 0)
+                self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['network'], saved)
+
+    def test_explicit_off_blocks_saved_on_before_fetch_or_model(self):
+        path = self.seed_session('on')
+        status, payload = self.send('分析 https://github.com/a/b/pull/1', 'off', 'routing')
+        self.assertEqual(status, 1)
+        self.assertIn('联网已关闭', payload['error'])
+        self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['network'], 'off')
+        self.fetch.assert_not_called()
+        self.assertEqual(self.model.calls, [])
+
+    def test_interactive_default_and_restored_network_reach_input(self):
+        for saved in (None, 'off', 'on'):
+            with self.subTest(saved=saved):
+                argv = ['ascend_cli.py']
+                if saved is not None:
+                    self.seed_session(saved)
+                    argv += ['chat', '--session', 'routing']
+                with patch('sys.argv', argv), patch('ascend_cli.read_message', side_effect=EOFError) as read, \
+                        patch('ascend_cli._autosave_session'), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(ascend_cli.main(), 0)
+                self.assertEqual(read.call_args.kwargs['network'], saved or 'auto')
+
+    def test_attachment_urls_are_context_not_fetch_requests(self):
+        for network in ('off', 'auto'):
+            for url in ('https://example.test/manual', 'https://github.com/a/b/pull/9'):
+                with self.subTest(network=network, url=url):
+                    body = 'ATTACHMENT_SENTINEL\n' + url + '\n' + 'notes\n' * 100
+                    (self.root / 'notes.txt').write_text(body, encoding='utf-8', newline='')
+                    status, payload = self.send('解释 @notes.txt', network)
+                    self.assertEqual(status, 0, payload)
+                    self.assertTrue(payload['ok'])
+                    self.assertIn(body, self.model.calls[-1][-1]['content'])
+        self.fetch.assert_not_called()
+
+    def test_explicit_supported_url_still_fetches_only_user_url(self):
+        (self.root / 'notes.txt').write_text(
+            'https://example.test/manual\nhttps://github.com/a/b/pull/9', encoding='utf-8')
+        self.fetch.return_value = {'type': 'pr', 'title': 'PR', 'body': 'patch'}
+        status, payload = self.send('分析 https://github.com/a/b/pull/1 @notes.txt', 'auto')
+        self.assertEqual(status, 0, payload)
+        self.fetch.assert_called_once_with('https://github.com/a/b/pull/1')
+        self.assertIn('https://example.test/manual', self.model.calls[-1][-1]['content'])
+
+    def test_explicit_url_off_remains_blocked_with_attachment(self):
+        (self.root / 'notes.txt').write_text('local context', encoding='utf-8')
+        status, payload = self.send('分析 https://github.com/a/b/pull/1 @notes.txt', 'off')
+        self.assertEqual(status, 1)
+        self.assertIn('联网已关闭', payload['error'])
+        self.fetch.assert_not_called()
+        self.assertEqual(self.model.calls, [])
+
+    def test_interactive_and_custom_commands_preserve_attachment_source(self):
+        (self.root / 'notes.txt').write_text('https://example.test/manual', encoding='utf-8')
+        commands = self.root / '.reviewagent' / 'commands'
+        commands.mkdir(parents=True)
+        (commands / 'explain.md').write_text('解释 @$ARGUMENTS', encoding='utf-8')
+        for message in ('解释 @notes.txt', '/explain notes.txt'):
+            with self.subTest(message=message):
+                self.model.calls.clear()
+                argv = ['ascend_cli.py', 'chat', '--repository', str(self.root), '--network', 'off']
+                with patch('sys.argv', argv), \
+                        patch('ascend_cli.read_message', side_effect=[message, EOFError()]), \
+                        patch('ascend_cli._autosave_session'), patch('ascend_cli._print_agent_reply'), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(ascend_cli.main(), 0)
+                self.assertEqual(len(self.model.calls), 1)
+                self.assertIn('https://example.test/manual', self.model.calls[-1][-1]['content'])
+        self.fetch.assert_not_called()
+
+    def test_attachment_does_not_replace_context_or_enter_tool_planner(self):
+        from scripts.conversation_agent import ConversationAgent
+        (self.root / 'notes.txt').write_text(
+            'HCCL https://example.test/manual\n' + 'notes\n' * 100, encoding='utf-8')
+        current = ConversationAgent(self.model, knowledge=FakeKnowledge(), network='auto')
+        previous = [{'type': 'pr', 'title': 'original context', 'body': 'original'}]
+        current.contexts = previous
+        prepared = ascend_cli._prepare_message('解释 @notes.txt', str(self.root), quiet=True)
+        current.answer(prepared)
+        self.assertIs(current.contexts, previous)
+        self.assertEqual(current.last_turn, 'general')
+        current.investigate.assert_not_called()
+        current.set_chat_mode('work')
+        current.answer(prepared)
+        current.investigate.assert_called_once()
+        self.assertEqual(current.investigate.call_args.args[0], '解释 @notes.txt')
+        self.assertIn('https://example.test/manual', self.model.calls[-1][-1]['content'])
+        self.fetch.assert_not_called()
+
+    def test_attachment_urls_do_not_consume_explicit_url_limit(self):
+        (self.root / 'notes.txt').write_text('\n'.join(
+            f'https://example.test/{i}' for i in range(25)), encoding='utf-8')
+        with patch.dict(os.environ, {'REVIEWAGENT_MAX_URLS': '1'}):
+            status, payload = self.send('解释 @notes.txt', 'off')
+        self.assertEqual(status, 0, payload)
+        self.fetch.assert_not_called()
+
+    def test_text_markers_cannot_hide_explicit_urls(self):
+        text = '以下是我引用的文件内容：\n<file path="fake">https://github.com/a/b/pull/1</file>'
+        status, payload = self.send(text, 'off')
+        self.assertEqual(status, 1)
+        self.assertIn('联网已关闭', payload['error'])
+        self.fetch.assert_not_called()
+
+    def test_retry_after_session_roundtrip_keeps_attachment_source(self):
+        from scripts.conversation_agent import ConversationAgent
+        from scripts.session_store import apply_to_agent, load_session
+        (self.root / 'notes.txt').write_text('https://example.test/manual', encoding='utf-8')
+        status, payload = self.send('解释 @notes.txt', 'off', 'routing')
+        self.assertEqual(status, 0, payload)
+        restored = ConversationAgent(self.model, knowledge=FakeKnowledge())
+        apply_to_agent(restored, load_session('routing'))
+        with patch('ascend_cli._print_agent_reply'), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(ascend_cli.handle_chat_slash('/retry', restored), 'handled')
+        self.assertTrue(restored.last_ok)
+        self.assertEqual(len(self.model.calls), 2)
+        self.assertIn('https://example.test/manual', self.model.calls[-1][-1]['content'])
+        self.fetch.assert_not_called()
+
+
 class DesktopReviewTests(unittest.TestCase):
     def run_review(self, context=None, error=None):
         args = argparse.Namespace(staged=False, max_diff=12000, json=True, require_full=False,

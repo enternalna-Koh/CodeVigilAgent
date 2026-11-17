@@ -65,6 +65,14 @@
 | `scripts/model_choices.py` | 下拉选项的纯逻辑（选厂商 / 选模型 / 自定义降级），CLI 与桌面共用 | 一般不动 |
 | `tests/test_structure_guard.py` | 结构守卫：行数预算、分层、注册表约定 | 调预算时 |
 | `desktop-app/win/app.py` | 桌面版入口，20 行 | 不动 |
+| `desktop_py/app.py` | 当前 Windows 桌面启动入口与布局；通过职责模块组合行为 | 修改窗口交互时 |
+| `desktop_py/cli_runtime.py` | CLI 子进程、异步结果队列、取消与关闭回收 | 修改任务执行时 |
+| `desktop_py/session_controller.py` | 发送/审查编排、会话读取与代次保护 | 修改会话交互时 |
+| `desktop_py/settings_dialog.py` | 当前桌面模型设置与配置保存 | 修改设置交互时 |
+| `scripts/gateway_key.py` | 新旧桌面共用的服务商/地址与密钥归属 | 修改密钥归属时 |
+| `scripts/patch_paths.py` | 补丁事务的固定目录句柄及安全文件操作 | 修改补丁文件访问时 |
+| `desktop_py/md_render.py` | 聊天消息的 Markdown 样式、气泡与文字复制 | 修改聊天消息呈现时 |
+| `desktop_py/ui_kit.py` | 共用颜色、字体和滚动容器 | 修改界面基础组件时 |
 | `desktop-app/win/cvapp/shell.py` | 窗口骨架：侧边栏 + 工作区 | 一般不动 |
 | `desktop-app/win/cvapp/features/` | **桌面版功能注册表** | 加桌面功能只动这里 |
 | `desktop-app/win/cvapp/panels.py` | 右侧面板槽位：按需创建 / 显示隐藏 / 任务后刷新 | 加第二个右侧面板时 |
@@ -75,11 +83,24 @@
 | `bin/` | Node 层 CLI（`reviewagent` 命令） | 加 npm 子命令时会 |
 | `launchers/` | 次要启动脚本 | 不动 |
 | `legacy/` | 已退役入口，只留档 | 不动 |
-| `tests/` | 回归测试（430 项 Python + 9 项 JS） | 每次加功能都要加 |
+| `tests/` | Python 行为/安全/结构回归与 JavaScript 向导测试；数量以本次测试输出为准 | 每次加功能都要加 |
 
 ---
 
 ## 四、桌面版的扩展点（重点）
+
+`启动桌面版.bat` 当前启动 `desktop_py/app.py`。此入口通过 `CliRuntime` 与
+`SessionController` 组合执行和会话能力：窗口控件只在主线程访问；耗时工作使用仓库快照；
+任务与历史读取分别带身份校验。任务运行时禁止切换仓库、历史或新建会话，关闭窗口负责回收子进程。
+当前入口与这两个职责模块均纳入结构预算及实际方法回归。新旧客户端共用 `scripts.gateway_key`，
+服务商或接口地址改变时清空密钥，返回原作用域才恢复原密钥。
+
+补丁事务通过 `scripts.patch_paths` 固定目录身份：Windows 不共享目录删除权限并使用相对句柄，
+POSIX 使用 `dir_fd` 和 `O_NOFOLLOW`。相对目标中的链接/重解析目录被拒绝；Windows 只读目标在
+整批验证阶段拒绝。POSIX 防护保证不沿被替换的路径写入另一目录；原目录本身被移动后，句柄仍指向
+原目录对象，不保证目录在提交瞬间仍处于原来的路径位置。
+
+下面的注册式扩展点属于保留的 `cvapp` 客户端；该客户端仍有独立回归，修改它不会自动修改当前入口。
 
 原来的操作行：
 

@@ -100,6 +100,7 @@ def serialize_agent(agent, *, include_all_history: bool = False) -> Dict[str, An
         'network': getattr(agent, 'network', 'auto'),
         'last_turn': getattr(agent, 'last_turn', None),
         'last_user_text': getattr(agent, 'last_user_text', None),
+        'last_user_source': getattr(getattr(agent, 'last_user_text', None), 'source_text', None),
         'last_reply': getattr(agent, 'last_reply', None),
         'history': history if include_all_history else history[-16:],
         'contexts': list(getattr(agent, 'contexts', []) or []),
@@ -139,6 +140,9 @@ def apply_to_agent(agent, data: Dict[str, Any]) -> None:
         agent.network = network
     agent.last_turn = data.get('last_turn')
     agent.last_user_text = data.get('last_user_text')
+    if isinstance(agent.last_user_text, str) and isinstance(data.get('last_user_source'), str):
+        from scripts.conversation_agent import UserMessage
+        agent.last_user_text = UserMessage(agent.last_user_text, data['last_user_source'])
     agent.last_reply = data.get('last_reply')
     agent.history = list(data.get('history') or [])
     agent.contexts = list(data.get('contexts') or [])

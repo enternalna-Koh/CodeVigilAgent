@@ -98,9 +98,10 @@ class SettingsDialog(tk.Toplevel):
         self.base_var = tk.StringVar(value=str(cfg.get("base_url") or ""))
         self.custom_var = tk.StringVar(value=self.choices.get("custom") or model0)
         self._syncing = False
-        self._key_scope = self._scope(provider0 or "deepseek",
-                                      str(cfg.get("base_url") or ""))
-        self._saved_key = str(cfg.get("api_key") or "")
+        GatewayKey = _scripts_import("scripts.gateway_key").GatewayKey
+        self._key_binding = GatewayKey(provider0 or "deepseek",
+                                       str(cfg.get("base_url") or ""),
+                                       str(cfg.get("api_key") or ""))
 
         self._style_combo()
 
@@ -122,7 +123,7 @@ class SettingsDialog(tk.Toplevel):
 
         tk.Label(body, text="API Key", bg=BG, fg=SUB, font=ui_font(10),
                  anchor="w").grid(row=last - 1, column=0, sticky="w", pady=8)
-        self.key_entry = self._entry(last - 1, self._saved_key, show="*")
+        self.key_entry = self._entry(last - 1, self._key_binding.saved_key, show="*")
         hint.grid(row=last, column=0, columnspan=2, sticky="ew", pady=(10, 0))
 
         buttons = tk.Frame(body, bg=BG)
@@ -215,10 +216,6 @@ class SettingsDialog(tk.Toplevel):
         self.base_var.trace_add("write", self._sync_key)
 
     # ------------------------------------------------------------ 联动
-    @staticmethod
-    def _scope(provider: str, base_url: str):
-        return provider.strip().lower(), base_url.strip().rstrip("/")
-
     def _set_custom_text(self, text: str) -> None:
         self._syncing = True
         self.custom_var.set(text)
@@ -268,12 +265,13 @@ class SettingsDialog(tk.Toplevel):
         if not self.degraded:
             option = self.choices["options"][self.choices["index"]]
             provider = option["file_provider"] or provider
-        scope = self._scope(provider, self.base_var.get())
-        if scope != self._key_scope:
-            self._key_scope = scope
-            keep = self._saved_key
+        if not hasattr(self, "key_entry"):
+            return
+        key = self._key_binding.update(provider, self.base_var.get(), self.key_entry.get())
+        if key != self.key_entry.get():
             self.key_entry.delete(0, "end")
-            self.key_entry.insert(0, keep)
+            self.key_entry.insert(0, key)
+        if self._key_binding.changed:
             self.hint.configure(text="服务商或 API 地址已变更\n"
                                      "请填写该地址对应的 API Key。", fg=FAIL_INK)
         elif not self.degraded:
@@ -299,8 +297,7 @@ class SettingsDialog(tk.Toplevel):
 
         provider, model = picked
         key = self.key_entry.get().strip()
-        if self._key_scope != self._scope(str(self.cfg.get("provider") or "deepseek"),
-                                         str(self.cfg.get("base_url") or "")) and not key:
+        if self._key_binding.changed and not key:
             self.hint.configure(text="还没填新服务商或地址的 API Key\n请填写后再保存。",
                                 fg=FAIL_INK)
             self.key_entry.focus_set()

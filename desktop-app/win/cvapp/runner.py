@@ -23,20 +23,25 @@ class Runner:
         self._on_done = on_done
         self._queue: queue.Queue = queue.Queue()
         self._proc: subprocess.Popen | None = None
-        self._sink = on_line          # 本轮输出的去处：默认写输出区，聊天时写气泡缓冲区
+        self._active: int | None = None
+        self._serial = 0
+        self._thread: threading.Thread | None = None
+        self._closed = False
+        self._after = None
+        self._draining = False
         self._tick()
 
     # ------------------------------------------------------------ 状态
     @property
     def busy(self) -> bool:
-        return self._proc is not None and self._proc.poll() is None
+        return self._active is not None
 
     # ------------------------------------------------------------ 控制
     def start(self, args: list, cwd: str, label: str, columns: int | None = None,
               sink=None) -> bool:
-        if self.busy:
+        if self._closed or self.busy:
             return False
-        self._sink = sink or self._on_line
+        sink = sink if sink is not None else self._on_line
 
         env = os.environ.copy()
         env['PYTHONIOENCODING'] = 'utf-8'
@@ -59,45 +64,98 @@ class Runner:
                 bufsize=1, creationflags=creation,
             )
         except Exception as exc:                       # noqa: BLE001
-            self._on_line(f'启动失败：{exc}\n')
+            sink(f'启动失败：{exc}\n')
             return False
 
-        threading.Thread(target=self._reader, args=(self._proc,), daemon=True).start()
+        self._serial += 1
+        self._active = self._serial
+        self._thread = threading.Thread(
+            target=self._reader, args=(self._proc, self._active, sink), daemon=True)
+        self._thread.start()
         self._on_start(label)
         return True
 
     def cancel(self) -> None:
-        if self.busy and self._proc is not None:
-            self._proc.terminate()
+        proc = self._proc
+        if self.busy and proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                return
             self._on_line('\n[已请求取消]\n')
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        if self._after is not None:
+            try:
+                self._root.after_cancel(self._after)
+            except tk.TclError:
+                pass
+            self._after = None
+        proc = self._proc
+        if proc is not None:
+            if proc.poll() is None:
+                try:
+                    proc.terminate()
+                except ProcessLookupError:
+                    pass
+            try:
+                proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=1)
+        if self._thread is not None:
+            self._thread.join(timeout=1)
+        self._active = None
+        self._proc = None
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
 
     def python(self) -> str:
         """用当前解释器 —— 启动器保证它带 tkinter，子进程也用它。"""
         return sys.executable
 
     # ------------------------------------------------------------ 内部
-    def _reader(self, proc: subprocess.Popen) -> None:
+    def _reader(self, proc: subprocess.Popen, task_id: int, sink) -> None:
         try:
-            for line in proc.stdout:                    # type: ignore[union-attr]
-                self._queue.put(('out', line))
+            with proc.stdout:
+                for line in proc.stdout:
+                    self._queue.put((task_id, sink, 'out', line))
         except Exception as exc:                       # noqa: BLE001
-            self._queue.put(('out', f'\n读取输出出错：{exc}\n'))
+            self._queue.put((task_id, sink, 'out', f'\n读取输出出错：{exc}\n'))
         finally:
-            self._queue.put(('done', proc.wait()))
+            self._queue.put((task_id, sink, 'done', proc.wait()))
 
     def _tick(self) -> None:
-        """每 40ms 把后台线程收到的输出搬到界面线程（tkinter 不是线程安全的）。"""
+        """Tk 线程消费事件；完成回调返回前仍占有本轮任务。"""
+        if self._closed or self._draining:
+            return
+        self._after = None
+        self._draining = True
         try:
-            while True:
-                kind, payload = self._queue.get_nowait()
+            while not self._closed:
+                task_id, sink, kind, payload = self._queue.get_nowait()
+                if task_id != self._active:
+                    continue
                 if kind == 'out':
-                    self._sink(payload)
+                    sink(payload)
                 else:
-                    self._sink = self._on_line
-                    self._on_done(int(payload))
+                    try:
+                        self._on_done(int(payload))
+                    finally:
+                        self._active = None
+                        self._proc = None
         except queue.Empty:
             pass
-        try:
-            self._root.after(40, self._tick)
-        except tk.TclError:                             # 窗口已关闭
-            pass
+        finally:
+            self._draining = False
+            if not self._closed:
+                try:
+                    self._after = self._root.after(40, self._tick)
+                except tk.TclError:
+                    pass

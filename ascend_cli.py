@@ -21,7 +21,7 @@ from scripts.smart_reviewer import SmartReviewer
 from scripts.agent_tools import find_test_commands, run_command
 from scripts.knowledge_search import KnowledgeSearch, PROJECT_ROOT
 from scripts.ai_adapter import get_ai_client, load_config_from_env, load_config_from_file, merge_config
-from scripts.conversation_agent import ConversationAgent
+from scripts.conversation_agent import ConversationAgent, UserMessage
 from scripts.chat_input import read_message
 from scripts.term_style import (
     brand,
@@ -110,7 +110,7 @@ def _prepare_message(text: str, repo_root: str, quiet: bool = False) -> str:
             print(mute(f'  · {note}'))
         for warning in warnings[:5]:
             print(warn(f'  · {warning}'))
-    return expanded
+    return UserMessage(expanded, text) if expanded != text else text
 
 
 def _expand_once_message(text: str, repo_root: str) -> str:
@@ -1320,7 +1320,7 @@ def chat(args: argparse.Namespace) -> int:
 
     agent = ConversationAgent(
         client,
-        network=args.network,
+        network=args.network or 'auto',
         progress=_on_progress,
     )
 
@@ -1346,6 +1346,8 @@ def chat(args: argparse.Namespace) -> int:
             else:
                 print(f"[ERROR] 无法恢复会话：{exc}")
             return 1
+    if args.network is not None:
+        agent.network = args.network
     repository = getattr(args, 'repository', None)
     if repository is not None:
         agent.desktop_repository = str(Path(repository).expanduser().resolve()) if repository else ''
@@ -1715,7 +1717,7 @@ def main() -> int:
     chat_parser.add_argument('--repository', help='桌面对话关联的本地仓库路径')
     chat_parser.add_argument('--json', action='store_true', help='以 JSON 输出一次性请求结果')
     chat_parser.add_argument('--multiline', action='store_true', help='每条消息都使用多行输入，/send 发送')
-    chat_parser.add_argument('--network', choices=['auto', 'on', 'off'], default='auto',
+    chat_parser.add_argument('--network', choices=['auto', 'on', 'off'], default=None,
                              help='auto 按需联网；on 每轮搜索；off 禁用外部资料获取（AI 调用仍联网）')
     chat_parser.set_defaults(func=chat)
 

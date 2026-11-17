@@ -125,6 +125,8 @@ class HistoryPanel(tk.Frame):
         self._empty: tk.Label | None = None
         self._placeholder = True
         self._generation = 0
+        self._open_generation = 0
+        self._closed = False
         self._pending = 0
         self._pump = None
         self._search_job = None
@@ -190,6 +192,8 @@ class HistoryPanel(tk.Frame):
     # ------------------------------------------------------------ 列表
     def refresh(self) -> None:
         """按当前搜索词重新拉列表（不动正在显示的对话内容）。"""
+        if self._closed:
+            return
         self._cancel_search_job()
         query = self._query()
         self._generation += 1
@@ -197,7 +201,7 @@ class HistoryPanel(tk.Frame):
         self.count_var.set('加载中…')
 
         def done(rows, error):
-            if generation != self._generation:
+            if self._closed or generation != self._generation:
                 return                      # 更晚的一次请求已经覆盖这一条
             if error:
                 self._apply([])
@@ -243,13 +247,29 @@ class HistoryPanel(tk.Frame):
 
     # ------------------------------------------------------------ 打开
     def _open(self, name: str) -> None:
-        if not name:
+        if not name or self._closed or self._task_busy():
             return
+        self._open_generation += 1
+        generation = self._open_generation
+        session_generation = self.app._session_generation
         self.selected = name
         self._paint()
         self.app.set_status('正在恢复历史会话…')
-        self._async(lambda: sessions.show_session(name),
-                    lambda session, error: self._render(name, session, error))
+
+        def done(session, error):
+            if (self._closed or generation != self._open_generation
+                    or session_generation != self.app._session_generation
+                    or self.app.runner.busy):
+                return
+            self._render(name, session, error)
+
+        self._async(lambda: sessions.show_session(name), done)
+
+    def _task_busy(self) -> bool:
+        if self.app.runner.busy:
+            self.app.append('\n任务运行中，暂不能切换或删除会话。\n', 'err')
+            return True
+        return False
 
     def _render(self, name: str, session: dict | None, error: str | None) -> None:
         if error or not session:
@@ -295,15 +315,18 @@ class HistoryPanel(tk.Frame):
     # ------------------------------------------------------------ 操作
     def reset_selection(self) -> None:
         """取消选中（切到新会话时用）。"""
+        self._open_generation += 1
         self.selected = ''
         self._paint()
 
     def new_session(self) -> None:
-        self.reset_selection()
-        self.app.reset_session(clear_output=True)
+        if not self.app.reset_session(clear_output=True):
+            return
         self.count_var.set(f'共 {len(self.rows)} 条会话')
 
     def delete_selected(self) -> None:
+        if self._closed or self._task_busy():
+            return
         name = self.selected
         if not name:
             messagebox.showinfo('删除会话', '先在列表里点选一条会话。', parent=self.app.root)
@@ -315,6 +338,8 @@ class HistoryPanel(tk.Frame):
                 f'确定删除「{title}」？\n\n会话文件会从磁盘移除，无法撤销。',
                 parent=self.app.root):
             return
+        if self._task_busy():
+            return
         try:
             sessions.delete_session(name)
         except sessions.SessionError as exc:
@@ -322,8 +347,20 @@ class HistoryPanel(tk.Frame):
             return
         if self.app.current_session == name:
             self.app.reset_session(clear_output=True)
-        self.selected = ''
+        self.reset_selection()
         self.refresh()
+
+    def close(self) -> None:
+        self._closed = True
+        self._generation += 1
+        self._open_generation += 1
+        self._cancel_search_job()
+        if self._pump is not None:
+            try:
+                self.after_cancel(self._pump)
+            except tk.TclError:
+                pass
+            self._pump = None
 
     # ------------------------------------------------------------ 搜索
     def _query(self) -> str:
@@ -358,6 +395,8 @@ class HistoryPanel(tk.Frame):
     # ------------------------------------------------------------ 线程
     def _async(self, work, done) -> None:
         """work() 在后台线程跑，done(result, error) 回到界面线程。"""
+        if self._closed:
+            return
         self._pending += 1
 
         def runner():
@@ -372,11 +411,13 @@ class HistoryPanel(tk.Frame):
         self._schedule()
 
     def _schedule(self) -> None:
-        if self._pump is None:
+        if not self._closed and self._pump is None:
             self._pump = self.after(60, self._drain)
 
     def _drain(self) -> None:
         self._pump = None
+        if self._closed:
+            return
         try:
             while True:
                 done, result, error = self._queue.get_nowait()

@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from scripts.patch_fix import FileEdit, ProposedFix, apply_fix, format_apply_result, parse_fix_json, preview_fix
+from scripts.patch_paths import AnchoredFile
 
 
 class PatchSafetyTests(unittest.TestCase):
@@ -139,7 +140,7 @@ class PatchSafetyTests(unittest.TestCase):
         target.write_bytes(b'old')
         for operation in ('read', 'git'):
             with self.subTest(operation=operation):
-                mocked = ('pathlib.Path.read_bytes' if operation == 'read'
+                mocked = ('scripts.patch_paths.AnchoredFile.snapshot' if operation == 'read'
                           else 'scripts.patch_fix.subprocess.run')
                 with patch(mocked, side_effect=PermissionError('denied')):
                     result = self.apply(FileEdit('first.py', 'replace', 'old', 'new'))
@@ -158,35 +159,38 @@ class PatchSafetyTests(unittest.TestCase):
         first, second = self.root / 'first.py', self.root / 'second.py'
         first.write_bytes(b'old\r\n')
         first.chmod(0o751)
+        original_mode = stat.S_IMODE(first.stat().st_mode)
+        if os.name == 'posix':
+            self.assertEqual(original_mode, 0o751)
         second.write_bytes(b'old\n')
-        replace = os.replace
+        replace = AnchoredFile.replace_from
 
-        def fail_second(source, target):
-            if Path(target) == second:
+        def fail_second(target, staged):
+            if target.path == second:
                 raise PermissionError('second write denied')
-            replace(source, target)
+            replace(target, staged)
 
-        with patch('scripts.patch_fix.os.replace', side_effect=fail_second):
+        with patch.object(AnchoredFile, 'replace_from', autospec=True, side_effect=fail_second):
             result = self.apply(FileEdit('first.py', 'replace', 'old', 'new'),
                                 FileEdit('second.py', 'replace', 'old', 'new'))
         self.assert_not_applied(result)
         self.assertEqual(first.read_bytes(), b'old\r\n')
         self.assertEqual(second.read_bytes(), b'old\n')
-        self.assertEqual(stat.S_IMODE(first.stat().st_mode), 0o751)
+        self.assertEqual(stat.S_IMODE(first.stat().st_mode), original_mode)
         self.assertEqual(result['results'][0]['status'], 'rolled_back')
         self.assertFalse(list(self.root.rglob('.reviewagent-*')))
 
     def test_later_write_failure_removes_new_files_and_directories(self):
         second = self.root / 'second.py'
         second.write_bytes(b'old')
-        replace = os.replace
+        replace = AnchoredFile.replace_from
 
-        def fail_second(source, target):
-            if Path(target) == second:
+        def fail_second(target, staged):
+            if target.path == second:
                 raise PermissionError('second write denied')
-            replace(source, target)
+            replace(target, staged)
 
-        with patch('scripts.patch_fix.os.replace', side_effect=fail_second):
+        with patch.object(AnchoredFile, 'replace_from', autospec=True, side_effect=fail_second):
             result = self.apply(FileEdit('new/a.py', 'create', replace='new'),
                                 FileEdit('second.py', 'replace', 'old', 'new'))
         self.assert_not_applied(result)
@@ -197,14 +201,14 @@ class PatchSafetyTests(unittest.TestCase):
         first, second = self.root / 'first.py', self.root / 'second.py'
         first.write_bytes(b'old')
         second.write_bytes(b'old')
-        replace = os.replace
+        replace = AnchoredFile.replace_from
 
-        def interrupt_second(source, target):
-            if Path(target) == second:
+        def interrupt_second(target, staged):
+            if target.path == second:
                 raise KeyboardInterrupt()
-            replace(source, target)
+            replace(target, staged)
 
-        with patch('scripts.patch_fix.os.replace', side_effect=interrupt_second):
+        with patch.object(AnchoredFile, 'replace_from', autospec=True, side_effect=interrupt_second):
             result = self.apply(FileEdit('first.py', 'replace', 'old', 'new'),
                                 FileEdit('second.py', 'replace', 'old', 'new'))
         self.assert_not_applied(result)
@@ -215,17 +219,18 @@ class PatchSafetyTests(unittest.TestCase):
     def test_rollback_failure_keeps_recovery_copy_and_reports_it(self):
         for name in ('first.py', 'second.py'):
             (self.root / name).write_bytes(b'old')
-        replace = os.replace
+        replace = AnchoredFile.replace_from
         calls = 0
 
-        def fail_write_and_rollback(source, target):
+        def fail_write_and_rollback(target, staged):
             nonlocal calls
             calls += 1
             if calls > 1:
                 raise PermissionError('filesystem unavailable')
-            replace(source, target)
+            replace(target, staged)
 
-        with patch('scripts.patch_fix.os.replace', side_effect=fail_write_and_rollback):
+        with patch.object(AnchoredFile, 'replace_from', autospec=True,
+                          side_effect=fail_write_and_rollback):
             result = self.apply(FileEdit('first.py', 'replace', 'old', 'new'),
                                 FileEdit('second.py', 'replace', 'old', 'new'))
         self.assertFalse(result['ok'])
@@ -238,6 +243,9 @@ class PatchSafetyTests(unittest.TestCase):
         target = self.root / 'first.py'
         target.write_bytes(b'old\r\nsecond\r\n')
         target.chmod(0o751)
+        original_mode = stat.S_IMODE(target.stat().st_mode)
+        if os.name == 'posix':
+            self.assertEqual(original_mode, 0o751)
         edit = FileEdit('first.py', 'replace', 'old\nsecond', 'new\nsecond')
         result = self.apply(edit, dry_run=True)
         self.assertTrue(result['ok'], result)
@@ -246,7 +254,7 @@ class PatchSafetyTests(unittest.TestCase):
         self.assertTrue(result['ok'], result)
         self.assertEqual(result['applied'], 2)
         self.assertEqual(target.read_bytes(), b'new\r\nsecond\r\n')
-        self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o751)
+        self.assertEqual(stat.S_IMODE(target.stat().st_mode), original_mode)
         self.assertEqual((self.root / 'new/a.py').read_bytes(), b'new\n')
         self.assertFalse(list(self.root.rglob('.reviewagent-*')))
 

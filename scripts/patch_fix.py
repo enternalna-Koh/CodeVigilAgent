@@ -6,12 +6,12 @@ import os
 import re
 import stat
 import subprocess
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from scripts.specialist_context import detect_scenario, load_specialist_context
+from scripts.patch_paths import AnchoredFile, PatchPaths
 
 FIX_SYSTEM = """你是 ReviewAgent 的补丁助手。根据 PR/Issue 证据与昇腾规范，提出**最小必要**的本地修改。
 只输出一个 JSON 对象，不要 Markdown 围栏，不要解释：
@@ -90,7 +90,11 @@ def _safe_relpath(path: str) -> Optional[Path]:
     if re.match(r'^[A-Za-z]:', cleaned):
         return None
     parts = Path(cleaned).parts
-    if any(p == '..' or p.casefold() == '.git' for p in parts):
+    if any(p == '..' or p.casefold() == '.git' or ':' in p or '\x00' in p or
+           (os.name == 'nt' and (p.endswith((' ', '.')) or
+            p.split('.')[0].upper() in {'CON', 'PRN', 'AUX', 'NUL',
+                                       *(f'COM{i}' for i in range(1, 10)),
+                                       *(f'LPT{i}' for i in range(1, 10))})) for p in parts):
         return None
     return Path(*parts)
 
@@ -218,21 +222,8 @@ def _git_metadata_paths(directory: Path) -> List[Path]:
     return [(directory / path).resolve() for path in paths]
 
 
-def _stage_bytes(target: Path, data: bytes, mode: Optional[int]) -> Path:
-    fd, name = tempfile.mkstemp(prefix='.reviewagent-', dir=str(target.parent))
-    staged = Path(name)
-    try:
-        with os.fdopen(fd, 'wb') as stream:
-            stream.write(data)
-        if mode is not None:
-            staged.chmod(mode)
-        return staged
-    except BaseException:
-        try:
-            staged.unlink()
-        except OSError:
-            pass
-        raise
+def _stage_bytes(target: AnchoredFile, data: bytes, mode: Optional[int]) -> AnchoredFile:
+    return target.stage(data, mode)
 
 
 def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = False) -> Dict:
@@ -240,10 +231,22 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
     root = root or work_root()
     result = {'root': str(root), 'ok': False, 'applied': 0, 'total': len(fix.files),
               'dry_run': dry_run, 'results': []}
+    try:
+        paths = PatchPaths(root)
+    except (OSError, ValueError, RuntimeError) as exc:
+        result['error'] = f'补丁验证失败，未写入任何文件: {exc}'
+        return result
+    try:
+        return _apply_anchored(fix, paths, dry_run, result)
+    finally:
+        paths.close(remove_created=not result['ok'])
+
+
+def _apply_anchored(fix, paths, dry_run, result):
+    root = paths.root
+    result['root'] = str(root)
     plans, seen, metadata = [], set(), {}
     try:
-        root = root.resolve(strict=True)
-        result['root'] = str(root)
         metadata[root] = _git_metadata_paths(root)
         for edit in fix.files:
             row = {'path': edit.path, 'status': 'not_applied'}
@@ -252,7 +255,8 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
                 rel = _safe_relpath(edit.path)
                 if not rel or edit.action not in ('create', 'replace'):
                     raise ValueError('非法路径或操作（禁止 Git 元数据）')
-                target = (root / rel).resolve()
+                anchored = paths.target(rel)
+                target = anchored.path
                 relative = target.relative_to(root)
                 if any(part.casefold() == '.git' for part in relative.parts):
                     raise ValueError('禁止修改 Git 元数据')
@@ -266,14 +270,13 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
                     raise ValueError('禁止修改 Git 元数据')
                 before, mode = None, None
                 if edit.action == 'create':
-                    if target.exists() or target.is_symlink():
+                    if anchored.exists():
                         raise ValueError('文件已存在，拒绝覆盖 create')
                     after = edit.replace.encode('utf-8')
                 else:
-                    if not target.is_file():
-                        raise ValueError('本地无此文件（请先 clone/checkout PR 分支）')
-                    before = target.read_bytes()
-                    mode = stat.S_IMODE(target.stat().st_mode)
+                    before, mode = anchored.snapshot()
+                    if os.name == 'nt' and not mode & stat.S_IWRITE:
+                        raise ValueError('目标文件为只读，拒绝应用补丁')
                     text = before.decode('utf-8')
                     newline = '\r\n' if '\r\n' in text else ('\r' if '\r' in text else '\n')
                     search = edit.search.replace('\r\n', '\n').replace('\r', '\n').replace('\n', newline)
@@ -281,7 +284,7 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
                     if not search or text.count(search) != 1:
                         raise ValueError('search 必须非空且唯一匹配')
                     after = text.replace(search, replacement, 1).encode('utf-8')
-                plans.append({'target': target, 'before': before, 'after': after,
+                plans.append({'target': anchored, 'before': before, 'after': after,
                               'mode': mode, 'row': row, 'action': edit.action})
             except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
                 row.update(status='rejected', error=str(exc))
@@ -297,18 +300,10 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
         result['error'] = f'补丁验证失败，未写入任何文件: {exc}'
         return result
 
-    staged, written, created_dirs, recovery = [], [], [], set()
+    staged, written, recovery = [], [], set()
     try:
         for plan in plans:
             target = plan['target']
-            missing = []
-            parent = target.parent
-            while not parent.exists():
-                missing.append(parent)
-                parent = parent.parent
-            for directory in reversed(missing):
-                directory.mkdir()
-                created_dirs.append(directory)
             plan['new'] = _stage_bytes(target, plan['after'], plan['mode'])
             staged.append(plan['new'])
             if plan['before'] is not None:
@@ -316,10 +311,10 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
                 staged.append(plan['backup'])
         for plan in plans:
             target = plan['target']
-            if ((plan['before'] is None and (target.exists() or target.is_symlink())) or
+            if ((plan['before'] is None and target.exists()) or
                     (plan['before'] is not None and target.read_bytes() != plan['before'])):
                 raise ValueError(f'验证后文件已变化，拒绝覆盖: {plan["row"]["path"]}')
-            os.replace(plan['new'], target)
+            target.replace_from(plan['new'])
             written.append(plan)
             plan['row']['status'] = 'created' if plan['action'] == 'create' else 'replaced'
         result.update(ok=True, applied=len(written))
@@ -330,7 +325,7 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
                 if plan['before'] is None:
                     plan['target'].unlink()
                 else:
-                    os.replace(plan['backup'], plan['target'])
+                    plan['target'].replace_from(plan['backup'])
                 plan['row']['status'] = 'rolled_back'
             except OSError as rollback_exc:
                 plan['row'].update(status='rollback_failed', error=str(rollback_exc))
@@ -347,12 +342,6 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
                 path.unlink()
             except OSError:
                 pass
-        if not result['ok']:
-            for directory in reversed(created_dirs):
-                try:
-                    directory.rmdir()
-                except OSError:
-                    pass
     return result
 
 

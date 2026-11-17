@@ -108,13 +108,10 @@ def diff_report(cwd: Optional[str] = None, staged: bool = False, max_chars: int 
     ok, msg = ensure_repo(cwd)
     if not ok:
         return msg
-    args = ['diff', '--stat']
+    full_args = ['diff', '--no-ext-diff', '--no-textconv']
     if staged:
-        args = ['diff', '--cached', '--stat']
-    stat = run_git(args, cwd=cwd)
-    full_args = ['diff']
-    if staged:
-        full_args = ['diff', '--cached']
+        full_args.append('--cached')
+    stat = run_git([*full_args, '--stat'], cwd=cwd)
     full = run_git(full_args, cwd=cwd)
     body = full['out'] or ''
     truncated = False

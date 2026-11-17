@@ -397,6 +397,14 @@ def bound_context(context, budget=24000):
     return context
 
 
+class UserMessage(str):
+    """保留用户原文来源，同时兼容只接收字符串的调用方。"""
+    def __new__(cls, text, source_text):
+        message = super().__new__(cls, text)
+        message.source_text = source_text
+        return message
+
+
 class ConversationAgent:
     def __init__(self, client, knowledge=None, fetcher=None, progress=None,
                  network='auto', searcher=None):
@@ -766,14 +774,15 @@ class ConversationAgent:
         return results
 
     def answer(self, text):
+        source_text = getattr(text, 'source_text', text).strip()
         text = text.strip()
         if not text:
             return ''
-        self.last_user_text = text
+        self.last_user_text = UserMessage(text, source_text) if source_text != text else text
         self.last_tools = []
         self.last_ok = True
         urls = list(dict.fromkeys(url.rstrip('.,;:!?，。；：！？）)]>') for url in
-                                 re.findall(r'https?://[^\s<>"`\u4e00-\u9fff]+', text)))
+                                 re.findall(r'https?://[^\s<>"`\u4e00-\u9fff]+', source_text)))
         max_urls = int(os.environ.get('REVIEWAGENT_MAX_URLS', '20'))
         if len(urls) > max_urls:
             return self._fail(
@@ -806,13 +815,13 @@ class ConversationAgent:
         else:
             failures = []
             # Long paste without URL → treat as review object (Windows multiline via /paste)
-            if len(text) >= 400 and not is_lightweight_chat(text):
+            if len(source_text) >= 400 and not is_lightweight_chat(source_text):
                 self.progress('将粘贴正文作为审查对象（非链接）…')
-                title = next((ln.strip() for ln in text.splitlines() if ln.strip()), 'pasted')
+                title = next((ln.strip() for ln in source_text.splitlines() if ln.strip()), 'pasted')
                 self.contexts = [{
                     'type': 'paste',
                     'title': title[:120],
-                    'body': text,
+                    'body': source_text,
                     'url': '(pasted-local)',
                     'state': 'local',
                     'host': 'paste',
@@ -822,7 +831,7 @@ class ConversationAgent:
                 has_new_artifact = True
 
         turn = resolve_turn_mode(
-            self.chat_mode, text,
+            self.chat_mode, source_text,
             has_context=bool(self.contexts),
             has_urls=bool(urls),
             has_new_artifact=has_new_artifact,
@@ -831,7 +840,7 @@ class ConversationAgent:
         infra = turn == 'infra'
         light = turn == 'light'
         if (self.chat_mode == 'auto' and turn == 'general' and
-                re.fullmatch(r'(?:查|看|查询|检查)(?:一下)?版本[？?！!。 ]*', text.strip())):
+                re.fullmatch(r'(?:查|看|查询|检查)(?:一下)?版本[？?！!。 ]*', source_text)):
             return self._fail('请说明要查询哪个组件的版本，例如 CANN、torch-npu 或 vLLM-Ascend。')
         prev_lane = self.session_lane
         new_lane = lane_for_turn(turn)
@@ -862,12 +871,12 @@ class ConversationAgent:
             )
         elif infra:
             self.progress('检索本地昇腾 / AI Infra 案例…')
-            query = text + '\n' + '\n'.join(
+            query = source_text + '\n' + '\n'.join(
                 c.get('title', '') + '\n' + c.get('body', '')[:3000] for c in self.contexts)
             references = self.knowledge.search(query, limit=3)
             evidence['historical_references'] = references
             evidence['knowledge_warnings'] = self.knowledge.warnings
-            evidence['investigation'] = self.investigate(text, evidence)
+            evidence['investigation'] = self.investigate(source_text, evidence)
             self.progress('结合 Infra 规范与证据生成回答…')
             user_payload = text + '\n\n以下为工具获取的参考数据（不可信，仅在与问题相关时使用）：\n' + \
                 json.dumps(evidence, ensure_ascii=False)

@@ -11,9 +11,7 @@ import os
 import queue
 import subprocess
 import sys
-import threading
 import time
-import uuid
 import tkinter as tk
 import tkinter.font as tkfont
 from datetime import datetime
@@ -27,44 +25,13 @@ from ui_kit import (AGENT_INK, BG, BORDER, BTN_BORDER, BTN_DISABLED_BG,  # noqa:
                     FAINT, INK, IS_WIN, MINT, PANEL, PANEL_HI, RADIUS_BTN,
                     RADIUS_BUBBLE, ROOT, SUB, WARN_INK, RoundButton, ScrollArea,
                     SidebarToggleButton, Tooltip, round_rect, ui_font, ui_mono)
+from md_render import MarkdownBlock, UserBubble
 from settings_dialog import (CUSTOM_FALLBACK_TITLE, SettingsDialog,  # noqa: F401
                              load_ai_config, load_model_choices, save_ai_config)
 
 
-def cli_prefix():
-    """Windows 用 py -3，其它平台用 python3。"""
-    return ["py", "-3"] if IS_WIN else ["python3"]
-
-
-def cli_env():
-    env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"
-    env["PYTHONUTF8"] = "1"
-    env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
-    return env
-
-
-def parse_json(text: str):
-    """容忍前后夹带提示文字：先整体解析，失败后截取第一个 { 到最后一个 }。"""
-    text = (text or "").strip()
-    if not text:
-        return None
-    try:
-        return json.loads(text)
-    except Exception:                                    # noqa: BLE001
-        start, end = text.find("{"), text.rfind("}")
-        if 0 <= start < end:
-            try:
-                return json.loads(text[start:end + 1])
-            except Exception:                            # noqa: BLE001
-                return None
-    return None
-
-
-def err_line(err: str, limit: int = 120) -> str:
-    """stderr 取最后一条非空行，供单行状态栏显示（不记录完整报错/密钥）。"""
-    lines = [ln.strip() for ln in (err or "").splitlines() if ln.strip()]
-    return lines[-1][:limit] if lines else ""
+from cli_runtime import CliRuntime, cli_env, cli_prefix
+from session_controller import SessionController, err_line, parse_json
 
 
 # ---------------------------------------------------------------- 计时与时间
@@ -123,47 +90,11 @@ def save_ui_state(**changes) -> None:
 
 
 # ---------------------------------------------------------------- 消息组件
-class UserBubble(tk.Frame):
-    """右侧圆角气泡：半透明观感的深色底 + 浅色文字。
-
-    宽度由外部传入再随时可调（set_max_width）：窗口/侧栏宽度变了只重画这一个气泡，
-    不再整段会话重绘；也就不会出现「恢复会话后气泡被压成一条、文字糊成一团」的问题。
-    """
-
-    def __init__(self, parent, text: str, font, max_width: int):
-        super().__init__(parent, bg=BG)
-        self._text = text
-        self._font = font
-        self._canvas = tk.Canvas(self, bg=BG, highlightthickness=0, bd=0)
-        self._canvas.pack(side="top", anchor="e", padx=(0, 12))
-        self.set_max_width(max_width)
-
-    def set_max_width(self, max_width: int) -> None:
-        wrap = max(120, int(max_width) - 24)
-        c = self._canvas
-        c.delete("all")
-        item = c.create_text(12, 8, text=self._text, width=wrap, anchor="nw",
-                             font=self._font, fill=BUBBLE_INK, justify="left")
-        box = c.bbox(item) or (0, 0, 0, 0)
-        bw = max(48, box[2] - box[0] + 24)
-        bh = max(34, box[3] - box[1] + 16)
-        c.configure(width=bw, height=bh)
-        c.create_polygon(round_rect(0.5, 0.5, bw - 0.5, bh - 0.5, RADIUS_BUBBLE),
-                         fill=BUBBLE_BG, outline=BUBBLE_BORDER, width=1, tags="bubble_bg")
-        c.tag_lower("bubble_bg")
-
-
-class AgentText(tk.Frame):
-    """左侧纯文字，不加气泡；换行宽度可随时刷新。"""
+class AgentText(MarkdownBlock):
+    """左侧回复：Markdown 渲染 + 可选中复制（Text 只读状态仍支持选择与 Ctrl+C）。"""
 
     def __init__(self, parent, text: str, font, wrap: int):
-        super().__init__(parent, bg=BG)
-        self._label = tk.Label(self, text=text, bg=BG, fg=AGENT_INK, font=font,
-                               justify="left", anchor="w", wraplength=wrap)
-        self._label.pack(side="left", padx=(12, 12), pady=(3, 3))
-
-    def set_wrap(self, wrap: int) -> None:
-        self._label.configure(wraplength=max(240, int(wrap)))
+        super().__init__(parent, text or "", font, wrap, markdown=True)
 
 
 class ThinkRow(tk.Frame):
@@ -194,7 +125,7 @@ class StatusRow(tk.Frame):
 
 
 # ---------------------------------------------------------------- 主窗口
-class App(tk.Tk):
+class App(CliRuntime, SessionController, tk.Tk):
     # 收起历史栏后留下的窄边宽度：只够放那个 24×24 的折叠按钮
     RAIL_WIDTH = 36
 
@@ -221,11 +152,11 @@ class App(tk.Tk):
         self.messages = []
         self.proc = None
         self.cancel_flag = False
+        self._init_runtime()
         self._resize_job = None
         self._task_label = ""
         self._done_queue: "queue.Queue" = queue.Queue()
-        # 每点一次「新对话」+1。在飞的 show_session / chat 回调只在代次没变时
-        # 才把结果写回界面，否则会把刚清空的对话又填回旧会话。
+        # 会话选择、新对话、删除及换仓库统一推进代次，过期回调不写界面。
         self._conversation_epoch = 0
         # 长任务（提问/审查）占用中：期间「新对话」置灰，避免上下文串台。
         self._running = False
@@ -254,7 +185,7 @@ class App(tk.Tk):
         self.bind("<Control-b>", self._toggle_sidebar_shortcut)
         self.bind("<Configure>", self._on_window_configure, add="+")
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.after(50, self._pump_done)
+        self._pump_job = self.after(50, self._pump_done)
         self.after(120, self.load_sessions)
         self.after(60, self.show_welcome)
 
@@ -496,7 +427,7 @@ class App(tk.Tk):
                 text.set_wrap(agent_w)
         for label in list(self._outputs):
             if label.winfo_exists():
-                label.configure(wraplength=agent_w)
+                label.set_wrap(agent_w)
         self.transcript.refresh()
         if was_at_bottom:
             # 重新折行会改总高度：原来停在底部的话，重排后也要回到底部，
@@ -556,10 +487,9 @@ class App(tk.Tk):
             elif role == "output":
                 # 审查/离线审查的结果用等宽字体（Consolas）+ 比正文（雅黑 12）
                 # 小一号的字号：肉眼一照面就能和主聊天分开，字号又足够大到读着不累。
-                label = tk.Label(row, text=message["content"], bg=BG, fg=AGENT_INK,
-                                 font=ui_mono(11), justify="left", anchor="w",
-                                 wraplength=self.agent_wrap(), pady=6)
-                label.pack(fill="x", padx=12)
+                label = MarkdownBlock(row, message["content"], ui_mono(11),
+                                      self.agent_wrap(), markdown=False)
+                label.pack(fill="x")
                 self._outputs.append(label)
             else:
                 text_row = AgentText(row, message["content"], self.font_body,
@@ -810,95 +740,7 @@ class App(tk.Tk):
             self._think_row = None
         return seconds
 
-    def _on_close(self):
-        self.stop_chat_timing()             # 关窗前停表，避免定时器打到已销毁的控件
-        self.destroy()
-
-    # ------------------------------------------------------------ 后端
-    def run_cli(self, *args, timeout: int = 120, track: bool = True, extra_env=None):
-        """同步跑一次 CLI，返回 (code, stdout, stderr)。track=False 时不占用取消句柄。
-
-        extra_env 用来给这一次调用补环境变量（提问时传 REVIEWAGENT_CLIENT_START，
-        让 CLI 用同一个单调时钟从「点发送」那一刻算耗时）。
-        """
-        env = cli_env()
-        if extra_env:
-            env.update({str(k): str(v) for k, v in extra_env.items()})
-        base = cli_prefix() + [str(ROOT / "ascend_cli.py")] + [str(a) for a in args]
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if IS_WIN else 0
-        try:
-            proc = subprocess.Popen(base, cwd=str(ROOT), env=env,
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    text=True, encoding="utf-8", errors="replace",
-                                    creationflags=flags)
-        except FileNotFoundError:
-            base = [sys.executable, str(ROOT / "ascend_cli.py")] + [str(a) for a in args]
-            proc = subprocess.Popen(base, cwd=str(ROOT), env=env,
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    text=True, encoding="utf-8", errors="replace",
-                                    creationflags=flags)
-        if track:
-            self.proc = proc
-        try:
-            out, err = proc.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            proc.terminate()
-            out, err = proc.communicate()
-            err = (err or "") + f"\n[超时 {timeout}s]"
-        code = proc.returncode
-        if track:
-            self.proc = None
-        return code, out or "", err or ""
-
-    def run_async(self, work, done, label: str, cancellable: bool = False):
-        """后台线程跑 CLI；结果放队列，由主线程的 _pump_done 取出执行（tkinter 不是线程安全的）。
-
-        cancellable=True 仅用于长任务（提问/审查）：这类调用 track=True 持有 proc 句柄，
-        取消按钮才真正生效；会话读写是短任务，取消按钮保持禁用，避免点了没反应。
-        """
-        self._task_label = label
-        if cancellable:
-            self.cancel_flag = False
-            self._running = True
-            self.new_button.set_enabled(False)
-        self.set_status(f"{label} 运行中…")
-        self.cancel_button.set_enabled(cancellable)
-
-        def runner():
-            try:
-                result = work()
-            except Exception as exc:                     # noqa: BLE001
-                result = ("error", str(exc))
-            self._done_queue.put((done, result, cancellable))
-
-        threading.Thread(target=runner, daemon=True).start()
-
-    def _pump_done(self):
-        try:
-            while True:
-                done, result, cancellable = self._done_queue.get_nowait()
-                if cancellable:
-                    # 只有长任务结束才放开「新对话」；短的会话读取不能提前解锁。
-                    self._running = False
-                    self._task_label = ""
-                    self.cancel_button.set_enabled(False)
-                    self.new_button.set_enabled(True)
-                try:
-                    done(result)
-                except Exception as exc:                 # noqa: BLE001
-                    self.set_status(f"回调失败：{exc}")
-        except queue.Empty:
-            pass
-        self.after(50, self._pump_done)
-
-    # ------------------------------------------------------------ 动作
-    def choose_repo(self):
-        path = filedialog.askdirectory(title="选择 Git 仓库", initialdir=self.repo_var.get())
-        if path:
-            self.repo_var.set(str(Path(path).resolve()))
-            self._set_session_header(self.session_title_var.get(),
-                                     f"仓库：{self.repo_var.get()}")
-
+    # ------------------------------------------------------------ 设置
     def open_settings(self):
         """弹出模型设置对话框（与旧版一致，应用内自选服务商/模型）。
 
@@ -954,161 +796,7 @@ class App(tk.Tk):
             messagebox.showinfo("模型设置",
                                 f"没有找到可用的文本编辑器，请手动打开：\n{config}")
 
-    def review_online(self):
-        self._review(False)
-
-    def review_offline(self):
-        self._review(True)
-
-    def _review(self, offline: bool):
-        args = ["review"] + (["--offline"] if offline else [])
-        label = "离线审查" if offline else "审查当前改动"
-
-        def done(result):
-            if result[0] == "error":
-                self.set_status(f"{label}失败")
-                return
-            if self.cancel_flag:
-                self.set_status("已取消")
-                return
-            code, out, err = result
-            text = (out or err).strip() or f"{label}没有输出。"
-            self.append_output(text)
-            self.set_status(f"{label}完成（退出码 {code}）")
-
-        self.run_async(lambda: self.run_cli(*args, timeout=180), done, label,
-                       cancellable=True)
-
-    def send(self):
-        text = self.input.get("1.0", "end").strip()
-        if not text:
-            return
-        if self._running:
-            self.set_status("上一个任务还没结束，请先取消或等它结束")
-            return
-        self.input.delete("1.0", "end")
-        self.cancel_flag = False
-        # 计时起点就取在「按下发送」这一行（单调时钟）；渲染气泡、启动进程都算在
-        # 用户等待里。同一个起点也传给 CLI，这样界面上的秒数、存进会话的
-        # elapsed_ms、历史里回看的数字是同一个数。
-        client_start = time.perf_counter()
-        self.append_user(text, "running")
-        self.begin_chat_timing(client_start)
-
-        # 新对话第一次发送才生成会话名：CLI 只有拿到 --session 才会落盘并记住上下文，
-        # 之前这里留空，等于每句都是无记忆的一次性提问，历史列表也永远不出现新条目。
-        if not self.session_name:
-            self.session_name = "desktop-win-" + uuid.uuid4().hex
-        session = self.session_name
-        repo = self.repo_var.get().strip()
-        epoch = self._conversation_epoch
-
-        def work():
-            args = ["chat", "--message", text, "--network", "auto", "--json",
-                    "--session", session]
-            if repo:
-                args += ["--repository", repo]
-            return self.run_cli(*args, timeout=180,
-                                extra_env={"REVIEWAGENT_CLIENT_START":
-                                           f"{client_start:.6f}"})
-
-        def done(result):
-            # 不管走哪条分支都先停表：成功 / 失败 / 取消 / 代次已变，一个定时器都不留。
-            ui_seconds = self.stop_chat_timing()
-            if epoch != self._conversation_epoch:
-                return                      # 期间已点「新对话」，这条回复不再写回界面
-            if result[0] == "error":
-                self._mark_last_user("failed", str(result[1]), ui_seconds)
-                self.set_status("请求失败")
-                return
-            code, out, err = result
-            parsed = parse_json(out)
-            payload = parsed or {}
-            # 界面显示以自己量的真实等待为准（和等待行最后那个数字连续）；
-            # CLI 拿老版本、没写耗时字段时才退回它给的值。
-            seconds = ui_seconds
-            if seconds is None:
-                seconds = elapsed_seconds(payload)
-            if self.cancel_flag:
-                self._mark_last_user("interrupted", "", seconds)
-                self.set_status("已取消")
-                return
-            reply = payload.get("reply")
-            if payload.get("ok") and reply:
-                elapsed_ms = payload.get("elapsed_ms")
-                if isinstance(elapsed_ms, bool) or not isinstance(elapsed_ms, (int, float)):
-                    elapsed_ms = int(round((seconds or 0) * 1000))
-                self._settle_last_user()        # 成功路径：只改数据，不重建会话
-                self.append_agent(str(reply), elapsed_ms=elapsed_ms,
-                                  finished_at=payload.get("finished_at") or "")
-                self.session_name = (payload.get("session") or payload.get("session_name")
-                                     or session)
-                # 这条会话刚被 CLI 追加了消息，缓存已经过期，下次打开要重新读
-                self._forget_session(self.session_name)
-                self.set_status("就绪")
-                self.load_sessions()
-            else:
-                reason = payload.get("error") or ""
-                if not reason and err.strip():
-                    reason = err_line(err) or "未知错误"
-                self._mark_last_user("failed", reason or "未知错误", seconds)
-                # JSON 解析失败时把 stderr 末行显示在状态栏，便于定位（不含密钥）。
-                self.set_status(err_line(err) if parsed is None and err_line(err)
-                                else "请求失败")
-
-        self.run_async(work, done, "提问", cancellable=True)
-
-    def cancel(self):
-        if self.proc is None:
-            return
-        self.cancel_flag = True
-        self.set_status("正在取消…")
-        try:
-            self.proc.terminate()
-        except Exception:                                # noqa: BLE001
-            pass
-
-    def new_conversation(self):
-        if self._running:
-            self._new_conversation_blocked()
-            return
-        self._conversation_epoch += 1       # 让在飞的历史读取结果作废
-        self.session_name = None
-        self.clear_transcript()
-        self._set_session_header("新对话", f"仓库：{self.repo_var.get()}")
-        self.input.delete("1.0", "end")
-        self.input.focus_set()
-        self.set_status("新对话")
-        self.render_sessions(self._sessions_cache)
-
-    def _new_conversation_blocked(self):
-        self.set_status("任务运行中，先取消或等它结束再开新对话")
-
-    # ------------------------------------------------------------ 会话
-    def load_sessions(self):
-        epoch = self._conversation_epoch
-        # 列表是后台刷新：如果期间状态栏已被别的动作改写（取消 / 新对话 …），
-        # 回来时就不要用「就绪」把它盖掉。比较的是状态文本，不依赖时序。
-        pending = "读取会话列表 运行中…"
-
-        def done(result):
-            if result[0] == "error":
-                if epoch == self._conversation_epoch and self.status_var.get() == pending:
-                    self.set_status("会话列表读取失败")
-                return
-            code, out, err = result
-            parsed = parse_json(out)
-            payload = parsed or {}
-            self._sessions_cache = payload.get("sessions") or []
-            self.render_sessions(self._sessions_cache)
-            if epoch == self._conversation_epoch and self.status_var.get() == pending:
-                self.set_status(err_line(err) if parsed is None and err_line(err)
-                                else "就绪")
-
-        self.run_async(lambda: self.run_cli("sessions", "list", timeout=60,
-                                            track=False),
-                       done, "读取会话列表")
-
+    # ------------------------------------------------------------ 会话列表绘制
     def render_sessions(self, sessions):
         raw = self.search_var.get().strip()
         query = "" if raw == "搜索标题和消息" else raw.lower()
@@ -1185,129 +873,6 @@ class App(tk.Tk):
             menu.tk_popup(event.x_root, event.y_root)
         finally:
             menu.grab_release()
-
-    def delete_session(self, name):
-        """删除会话：sessions delete <name>；删除当前会话则清空对话区。"""
-        if not name:
-            return
-        self._forget_session(name)
-        # 先把这行从列表里摘掉：CLI 往返要一秒左右，等它回来那行还杵在那儿，
-        # 看着像「点了没删掉」。失败时 done() 会重新拉一次列表回滚。
-        self._sessions_cache = [s for s in self._sessions_cache
-                                if s.get("name") != name]
-        self.render_sessions(self._sessions_cache)
-        self.set_status(f"正在删除会话：{name}")
-
-        def done(result):
-            if result[0] == "error":
-                self.set_status(f"删除失败：{result[1]}")
-                self.load_sessions()
-                return
-            code, out, err = result
-            if code != 0 and not (parse_json(out) or {}).get("ok"):
-                self.set_status(f"删除失败：{err_line(err) or '未知错误'}")
-                self.load_sessions()
-                return
-            if self.session_name == name:
-                self._conversation_epoch += 1
-                self.session_name = None
-                self.clear_transcript()
-                self._set_session_header("新对话", f"仓库：{self.repo_var.get()}")
-            # 先刷列表再写状态：load_sessions 会先把状态改成「读取会话列表…」，
-            # 顺序反了的话「已删除会话」会被它盖掉。
-            self.load_sessions()
-            self.set_status(f"已删除会话：{name}")
-
-        self.run_async(lambda: self.run_cli("sessions", "delete", name, timeout=60,
-                                            track=False), done, "删除会话")
-
-    def show_session(self, name):
-        if not name:
-            return
-        # 打开过的会话直接拿缓存渲染：CLI 一次往返接近一秒，切回来没必要再等。
-        cached = self._session_cache.get(name)
-        if cached is not None:
-            session, parsed, err = cached
-            self._apply_session(name, session, parsed, err, from_cache=True)
-            return
-
-        # 先高亮被点的那一行：读取要等 CLI，没反馈的话会像「点了没反应」。
-        self._pending_session = name
-        self.render_sessions(self._sessions_cache)
-        self.set_status(f"正在打开会话：{name}")
-        epoch = self._conversation_epoch
-
-        def done(result):
-            # 点开历史后用户又点了「新对话」：这次结果已经过期，不能再把旧会话
-            # 的标题 / 消息写回来（否则界面会闪一下新对话又弹回旧的）。
-            if epoch != self._conversation_epoch:
-                self._pending_session = None
-                return
-            if result[0] == "error":
-                self._pending_session = None
-                self.render_sessions(self._sessions_cache)
-                self.set_status("读取会话失败")
-                return
-            code, out, err = result
-            parsed = parse_json(out)
-            payload = parsed or {}
-            session = payload.get("session") or {}
-            self._apply_session(name, session, parsed, err)
-
-        self.run_async(lambda: self.run_cli("sessions", "show", name, timeout=60,
-                                            track=False),
-                       done, "读取会话")
-
-    def _apply_session(self, name, session, parsed=None, err="", from_cache=False):
-        """把一条会话铺到聊天区。缓存命中与 CLI 返回走同一条路径，行为一致。"""
-        self._pending_session = None
-        self._remember_session(name, session, parsed, err)
-        messages = session.get("messages") or []
-        self.session_name = name
-        self._set_session_header(
-            session.get("title") or name,
-            f"仓库：{session.get('repository') or self.repo_var.get()}")
-        self.stop_chat_timing()             # 切会话：停掉上一轮的等待计时
-        # 不在这里 clear()：rerender 会把新内容建好再一次性替换，
-        # 先清空的话中途会看到一片空白或半截文字。
-        self.messages = []
-        for message in messages:
-            role = message.get("role")
-            content = message.get("content") or ""
-            if role == "user":
-                # 旧会话没有 started_at 时留空，时间标签不显示，也不报错。
-                self.messages.append({"role": "user", "content": content,
-                                      "status": message.get("status") or "",
-                                      "detail": message.get("error") or "",
-                                      "sent_at": (message.get("started_at")
-                                                  or message.get("updated_at")),
-                                      "elapsed_ms": message.get("elapsed_ms")})
-            elif role == "assistant":
-                self.messages.append({"role": "assistant", "content": content,
-                                      "status": "completed",
-                                      "elapsed_ms": message.get("elapsed_ms"),
-                                      "finished_at": (message.get("finished_at")
-                                                      or message.get("updated_at"))})
-        self.rerender()
-        # 恢复后画布宽度可能刚变过：补一帧按真实宽度重排气泡，避免留下窄气泡
-        self._schedule_rewrap(60)
-        # 列表按 session_name 决定高亮，不重绘的话点开的会话看不出被选中。
-        self.render_sessions(self._sessions_cache)
-        note = "（缓存）" if from_cache else ""
-        self.set_status(err_line(err) if parsed is None and err_line(err)
-                        else f"已打开会话：{name}{note}")
-
-    def _remember_session(self, name, session, parsed, err):
-        """只缓存最近打开的几条，避免会话一多把内存撑起来。"""
-        self._session_cache.pop(name, None)
-        self._session_cache[name] = (session, parsed, err)
-        while len(self._session_cache) > 6:
-            oldest = next(iter(self._session_cache))
-            self._session_cache.pop(oldest, None)
-
-    def _forget_session(self, name):
-        self._session_cache.pop(name, None)
-
 
 def main():
     App().mainloop()
