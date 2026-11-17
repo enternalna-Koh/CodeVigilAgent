@@ -160,7 +160,7 @@ class AgentText(tk.Frame):
         super().__init__(parent, bg=BG)
         self._label = tk.Label(self, text=text, bg=BG, fg=AGENT_INK, font=font,
                                justify="left", anchor="w", wraplength=wrap)
-        self._label.pack(side="left", padx=(12, 12), pady=(2, 2))
+        self._label.pack(side="left", padx=(12, 12), pady=(3, 3))
 
     def set_wrap(self, wrap: int) -> None:
         self._label.configure(wraplength=max(240, int(wrap)))
@@ -172,7 +172,7 @@ class ThinkRow(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent, bg=BG)
         self.label = tk.Label(self, text="思考中…", bg=BG, fg=SUB,
-                              font=ui_font(9), anchor="w", justify="left")
+                              font=ui_font(10), anchor="w", justify="left")
         self.label.pack(side="left", padx=(12, 12), pady=(2, 2))
 
     def update_seconds(self, seconds) -> None:
@@ -185,10 +185,10 @@ class StatusRow(tk.Frame):
 
     def __init__(self, parent, text: str, color: str, detail: str = "", wrap: int = 400):
         super().__init__(parent, bg=BG)
-        tk.Label(self, text=text, bg=BG, fg=color, font=ui_font(9), anchor="w",
+        tk.Label(self, text=text, bg=BG, fg=color, font=ui_font(10), anchor="w",
                  justify="left").pack(side="top", anchor="w", padx=(12, 12))
         if detail:
-            tk.Label(self, text=detail, bg=BG, fg=FAINT, font=ui_font(8), anchor="w",
+            tk.Label(self, text=detail, bg=BG, fg=FAINT, font=ui_font(9), anchor="w",
                      justify="left", wraplength=max(200, wrap)).pack(
                 side="top", anchor="w", padx=(12, 12))
 
@@ -214,8 +214,8 @@ class App(tk.Tk):
         self.status_var = tk.StringVar(value="就绪")
         self.session_title_var = tk.StringVar(value="")
         self.session_repo_var = tk.StringVar(value="")
-        self.font_body = ui_font(10)
-        self.font_small = ui_font(9)
+        self.font_body = ui_font(12)
+        self.font_small = ui_font(10)
 
         self.session_name = None
         self.messages = []
@@ -263,7 +263,7 @@ class App(tk.Tk):
         bar = tk.Frame(self, bg=PANEL_HI)
         bar.pack(fill="x", side="bottom")
         tk.Label(bar, textvariable=self.status_var, bg=PANEL_HI, fg=SUB,
-                 font=ui_font(9), anchor="w").pack(fill="x", padx=12, pady=4)
+                 font=ui_font(10), anchor="w").pack(fill="x", padx=12, pady=4)
 
         outer = tk.Frame(self, bg=BG)
         outer.pack(fill="both", expand=True, padx=10, pady=10)
@@ -366,9 +366,9 @@ class App(tk.Tk):
         header = tk.Frame(parent, bg=BG)
         header.pack(fill="x", pady=(10, 0))
         tk.Label(header, textvariable=self.session_title_var, bg=BG, fg=INK,
-                 font=ui_font(11, True), anchor="w").pack(fill="x")
+                 font=ui_font(13, True), anchor="w").pack(fill="x")
         tk.Label(header, textvariable=self.session_repo_var, bg=BG, fg=FAINT,
-                 font=ui_font(8), anchor="w").pack(fill="x", pady=(2, 0))
+                 font=ui_font(9), anchor="w").pack(fill="x", pady=(2, 0))
         self._set_session_header("CodeVigil Agent", f"仓库：{self.repo_var.get()}")
 
         frame = tk.Frame(parent, bg=BG)
@@ -385,7 +385,7 @@ class App(tk.Tk):
         box = tk.Frame(parent, bg=BG)
         box.pack(fill="x", pady=(10, 0))
         self.input = tk.Text(box, height=3, width=1, bg=PANEL_HI, fg=INK, insertbackground=INK,
-                             relief="flat", font=ui_font(10), wrap="word",
+                             relief="flat", font=ui_font(12), wrap="word",
                              highlightthickness=1, highlightbackground=BORDER,
                              padx=8, pady=6)
         self.input.pack(side="left", fill="both", expand=True)
@@ -563,7 +563,7 @@ class App(tk.Tk):
                 self._render_user_status(row, message)
             elif role == "output":
                 label = tk.Label(row, text=message["content"], bg=BG, fg=AGENT_INK,
-                                 font=ui_mono(9), justify="left", anchor="w",
+                                 font=ui_mono(10), justify="left", anchor="w",
                                  wraplength=self.agent_wrap())
                 label.pack(fill="x", padx=12)
                 self._outputs.append(label)
@@ -586,7 +586,7 @@ class App(tk.Tk):
             for child in list(row.winfo_children()):
                 child.destroy()
             tk.Label(row, text=f"（这条消息无法显示：{exc}）", bg=BG, fg=FAIL_INK,
-                     font=ui_font(9), anchor="w", justify="left",
+                     font=ui_font(10), anchor="w", justify="left",
                      wraplength=self.agent_wrap()).pack(fill="x", padx=12, pady=2)
         except tk.TclError:
             pass
