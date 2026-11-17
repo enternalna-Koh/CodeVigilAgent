@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+import tkinter.font as tkfont
 
 from . import ansi_term, theme
 
@@ -39,6 +40,12 @@ def section_label(parent, text: str) -> tk.Label:
         parent, text=text, bg=theme.SIDEBAR, fg=theme.FG_FAINT,
         font=theme.ui_font(8), anchor='w', padx=10, pady=2,
     )
+
+
+def caption_label(parent, text: str) -> tk.Label:
+    """小标题：输出区上方的「审查结果 / 运行输出」这类说明文字。"""
+    return tk.Label(parent, text=text, bg=theme.BG, fg=theme.FG_DIM,
+                    font=theme.ui_font(9), anchor='w')
 
 
 def divider(parent) -> tk.Frame:
@@ -145,6 +152,7 @@ class OutputPane(tk.Frame):
             inner, bg=theme.PANEL, fg=theme.FG, insertbackground=theme.FG,
             relief='flat', font=mono_font, wrap='none', padx=12, pady=10,
             spacing1=1, spacing3=1, undo=False, state='normal',
+            height=6, width=1,          # 请求尺寸压小：高度交给外层 grid 权重分配
         )
         # 滚动条跟面板同色：原生 ttk 的浅灰条放在深色区里太跳
         self.vsb = SlimScrollbar(inner, command=self.text.yview,
@@ -213,3 +221,89 @@ class OutputPane(tk.Frame):
     def clear(self) -> None:
         self.text.delete('1.0', 'end')
 
+
+
+def round_rect(x1, y1, x2, y2, r, steps: int = 6):
+    """圆角矩形的多边形顶点（Canvas.create_polygon 用）。"""
+    import math
+
+    r = max(1.0, min(r, (x2 - x1) / 2, (y2 - y1) / 2))
+    corners = [(x1 + r, y1 + r, math.pi, math.pi / 2),
+               (x2 - r, y1 + r, -math.pi / 2, math.pi / 2),
+               (x2 - r, y2 - r, 0.0, math.pi / 2),
+               (x1 + r, y2 - r, math.pi / 2, math.pi / 2)]
+    pts = []
+    for cx, cy, start, span in corners:
+        for i in range(steps + 1):
+            angle = start + span * (i / steps)
+            pts.extend([cx + r * math.cos(angle), cy + r * math.sin(angle)])
+    return pts
+
+
+class PillButton(tk.Canvas):
+    """圆角药丸按钮：深色底 + 细边框 + 强调色文字（对齐 macOS 版观感）。"""
+
+    HEIGHT = 32
+
+    def __init__(self, parent, text: str, command=None, accent: bool = False,
+                 font=None, padx: int = 14, bg=None):
+        self._font = font or theme.ui_font(10)
+        self._measure = tkfont.Font(family=self._font[0], size=self._font[1],
+                                    weight=self._font[2] if len(self._font) > 2 else 'normal')
+        self._text = text
+        self._command = command
+        self._accent = accent
+        self._padx = padx
+        self._bg = bg or theme.BG
+        self._enabled = True
+        self._hover = False
+        width = self._measure.measure(text) + padx * 2
+        super().__init__(parent, width=width, height=self.HEIGHT,
+                         highlightthickness=0, bd=0, bg=self._bg, cursor='hand2')
+        self._draw()
+        self.bind('<Button-1>', self._click)
+        self.bind('<Enter>', self._enter)
+        self.bind('<Leave>', self._leave)
+
+    # ---- 兼容 tk.Button 的 config(state=/text=) 调用
+    def configure(self, cnf=None, **kw):
+        if 'state' in kw:
+            self._enabled = kw.pop('state') != 'disabled'
+            self.configure(cursor='hand2' if self._enabled else 'arrow')
+            self._draw()
+        if 'text' in kw:
+            self._text = kw.pop('text')
+            self._resize()
+            self._draw()
+        return super().configure(cnf, **kw)
+
+    config = configure
+
+    def _resize(self) -> None:
+        self.configure(width=self._measure.measure(self._text) + self._padx * 2)
+
+    def _click(self, _event=None):
+        if self._enabled and self._command is not None:
+            self._command()
+        return 'break'
+
+    def _enter(self, _event=None):
+        self._hover = True
+        self._draw()
+
+    def _leave(self, _event=None):
+        self._hover = False
+        self._draw()
+
+    def _draw(self) -> None:
+        self.delete('all')
+        w, h = int(self['width']), self.HEIGHT
+        if not self._enabled:
+            fill, outline, ink = theme.PANEL, theme.BORDER, theme.FG_FAINT
+        else:
+            fill = theme.PANEL_HI if self._hover else theme.PANEL
+            outline = theme.ACCENT_DIM if (self._accent or self._hover) else theme.BORDER
+            ink = theme.ACCENT if self._accent else theme.FG
+        self.create_polygon(round_rect(0.5, 0.5, w - 0.5, h - 0.5, 8),
+                            fill=fill, outline=outline, width=1)
+        self.create_text(w / 2, h / 2, text=self._text, fill=ink, font=self._font)

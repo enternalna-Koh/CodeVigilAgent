@@ -1,5 +1,6 @@
 import Cocoa
 import Darwin
+import QuartzCore
 import UniformTypeIdentifiers
 
 private enum AgentTask {
@@ -624,12 +625,411 @@ private enum TerminalStyle {
     }
 }
 
+// MARK: - 聊天区视图（iMessage 风格气泡）
+
+/// 聊天区耗时口径：和终端 ThinkPanel 一致（秒保留一位，60 秒以上写 1m 05.3s）。
+/// 只用单调时钟做差，系统时间被调整时不会出现负数或跳变；
+/// 界面上不再出现任何墙上时间（HH:mm），只展示本次请求的耗时。
+private enum ChatTiming {
+    static func elapsed(since start: TimeInterval) -> TimeInterval {
+        max(0, ProcessInfo.processInfo.systemUptime - start)
+    }
+
+    static func text(_ seconds: TimeInterval) -> String {
+        let value = max(0, seconds)
+        if value < 60 { return String(format: "%.1fs", value) }
+        let minutes = Int(value) / 60
+        return String(format: "%dm %04.1fs", minutes, value - Double(minutes * 60))
+    }
+
+    /// 会话消息里的耗时字段（毫秒）。旧会话没有该字段时返回 nil：界面不显示耗时行。
+    static func milliseconds(_ value: Any?) -> Int? {
+        if let number = value as? NSNumber { return number.intValue }
+        if let string = value as? String { return Int(string) }
+        return nil
+    }
+
+    /// 与 Python `datetime.now().astimezone().isoformat(timespec='seconds')` 同格式。
+    static func isoString(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = .current
+        return formatter.string(from: date)
+    }
+}
+
+/// 聊天滚动区里的文档视图：坐标系自上而下，滚动原点在顶部。
+private final class ChatDocumentView: NSView {
+    override var isFlipped: Bool { true }
+}
+
+/// 用户消息行：右侧对齐的圆角气泡；短消息贴合文字，长消息按可用宽度的 72% 换行。
+/// 气泡下方不再显示任何时间 —— 墙上时间已按要求移除。
+private final class ChatBubbleRow: NSView {
+    private let bubble = NSView()
+    private let label: NSTextField
+
+    init(text: String) {
+        label = NSTextField(wrappingLabelWithString: text)
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        bubble.translatesAutoresizingMaskIntoConstraints = false
+        bubble.wantsLayer = true
+        bubble.layer?.cornerRadius = 14
+        bubble.layer?.masksToBounds = true
+        bubble.layer?.backgroundColor = ChatBubbleRow.bubbleColor(for: effectiveAppearance).cgColor
+        addSubview(bubble)
+
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.isEditable = false
+        label.isSelectable = true
+        label.isBezeled = false
+        label.drawsBackground = false
+        label.font = .systemFont(ofSize: 13)
+        label.textColor = .labelColor
+        label.lineBreakMode = .byWordWrapping
+        label.maximumNumberOfLines = 0
+        bubble.addSubview(label)
+
+        // 气泡宽度的上限放在文本上：气泡 = 文本 + 左右内边距，短消息自然贴合文字。
+        NSLayoutConstraint.activate([
+            bubble.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            bubble.topAnchor.constraint(equalTo: topAnchor),
+            bubble.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 12),
+
+            label.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 12),
+            label.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -12),
+            label.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 8),
+            label.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -8),
+            label.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, multiplier: 0.72),
+
+            bubble.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        bubble.layer?.backgroundColor = ChatBubbleRow.bubbleColor(for: effectiveAppearance).cgColor
+    }
+
+    override func layout() {
+        // 换行标签要拿到实际可用宽度才会正确折行；变化不大时不重复失效，避免抖动。
+        let available = max(40, bounds.width * 0.72 - 24)
+        if abs(label.preferredMaxLayoutWidth - available) > 0.5 {
+            label.preferredMaxLayoutWidth = available
+        }
+        super.layout()
+    }
+
+    private static func bubbleColor(for appearance: NSAppearance) -> NSColor {
+        let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return dark ? NSColor(white: 0.25, alpha: 1) : NSColor(white: 0.92, alpha: 1)
+    }
+}
+
+/// Agent 消息行：左侧纯文本 + 一行耗时（已完成 3.2s）。不再显示 HH:mm。
+private final class ChatAgentRow: NSView {
+    private let label: NSTextField
+
+    init(text: String, statusText: String?) {
+        label = NSTextField(wrappingLabelWithString: text)
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.isEditable = false
+        label.isSelectable = true
+        label.isBezeled = false
+        label.drawsBackground = false
+        label.font = .systemFont(ofSize: 13)
+        label.textColor = .labelColor
+        label.lineBreakMode = .byWordWrapping
+        label.maximumNumberOfLines = 0
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(label)
+
+        if let statusText = statusText, !statusText.isEmpty {
+            let status = NSTextField(labelWithString: statusText)
+            status.font = .systemFont(ofSize: 12)          // 比正文小一号
+            status.textColor = .secondaryLabelColor
+            stack.addArrangedSubview(status)
+        }
+
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layout() {
+        let available = max(80, bounds.width * 0.86 - 24)
+        if abs(label.preferredMaxLayoutWidth - available) > 0.5 {
+            label.preferredMaxLayoutWidth = available
+        }
+        super.layout()
+    }
+}
+
+/// 失败 / 已取消：终端口径的状态行，失败时下一行给出错误原因。
+private final class ChatResultRow: NSView {
+    private let detailLabel: NSTextField?
+
+    init(statusText: String, detail: String?, color: NSColor) {
+        let trimmed = detail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let detailField: NSTextField? = trimmed.isEmpty ? nil : NSTextField(wrappingLabelWithString: trimmed)
+        detailLabel = detailField
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        let status = NSTextField(labelWithString: statusText)
+        status.font = .systemFont(ofSize: 12)
+        status.textColor = color
+
+        var rowViews: [NSView] = [status]
+        if let detailField = detailField { rowViews.append(detailField) }
+        let stack = NSStackView(views: rowViews)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 3
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        if let detailField = detailField {
+            detailField.font = .systemFont(ofSize: 11)
+            detailField.textColor = .secondaryLabelColor
+            detailField.lineBreakMode = .byWordWrapping
+            detailField.maximumNumberOfLines = 3
+        }
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layout() {
+        let available = max(80, bounds.width - 24)
+        if let detailLabel = detailLabel,
+           abs(detailLabel.preferredMaxLayoutWidth - available) > 0.5 {
+            detailLabel.preferredMaxLayoutWidth = available
+        }
+        super.layout()
+    }
+}
+
+/// 等待行：只显示「思考中… 3.2s」，计时刷新时只改这一行。
+/// Python 在 --json 模式下不输出进度步骤（think_ui 只写终端 stdout），
+/// 拿不到步骤时按约定只显示计时，不编造内容。
+private final class ChatPendingRow: NSView {
+    private let label = NSTextField(labelWithString: "思考中… 0.0s")
+
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .secondaryLabelColor
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            label.topAnchor.constraint(equalTo: topAnchor),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func update(seconds: TimeInterval) {
+        label.stringValue = "思考中… " + ChatTiming.text(seconds)
+    }
+}
+
+/// 会话标题 / 仓库信息：用 labelColor 与 secondaryLabelColor，不再染薄荷绿。
+/// 恢复历史时不显示「恢复时间」——界面上不出现任何 HH:mm。
+private final class ChatHeaderRow: NSView {
+    init(title: String, repository: String) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.textColor = .labelColor
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let repoLabel = NSTextField(labelWithString: "仓库：" + (repository.isEmpty ? "未关联" : repository))
+        repoLabel.font = .systemFont(ofSize: 11)
+        repoLabel.textColor = .secondaryLabelColor
+        repoLabel.lineBreakMode = .byTruncatingMiddle
+        repoLabel.toolTip = repository.isEmpty ? nil : repository
+        repoLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView(views: [titleLabel, repoLabel])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 3
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+}
+
+// MARK: - 扁平按钮
+
+/// 深色扁平按钮：自绘圆角底 + 1pt 中性灰描边 + 薄荷绿标题。
+/// 悬停提亮、按下压暗、禁用降透明度；浅色外观下换成浅底并把薄荷绿压暗 20%。
+private final class StyledButton: NSButton {
+    private let mintInk = NSColor(calibratedRed: 0.48, green: 0.92, blue: 0.78, alpha: 1)
+    private var hovering = false
+    private var trackingAreaRef: NSTrackingArea?
+
+    init(title: String, target: AnyObject?, action: Selector?) {
+        super.init(frame: .zero)
+        self.title = title
+        self.target = target
+        self.action = action
+        isBordered = false
+        bezelStyle = .inline
+        wantsLayer = true
+        focusRingType = .exterior
+        font = .systemFont(ofSize: 13, weight: .medium)
+        translatesAutoresizingMaskIntoConstraints = false
+        heightAnchor.constraint(equalToConstant: 28).isActive = true
+        refreshStyle()
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var intrinsicContentSize: NSSize {
+        let text = title as NSString
+        let width = text.size(withAttributes: [.font: font ?? NSFont.systemFont(ofSize: 13)]).width
+        return NSSize(width: max(64, width + 24), height: 28)
+    }
+
+    override var isHighlighted: Bool {
+        didSet { refreshStyle() }
+    }
+
+    override var isEnabled: Bool {
+        didSet { refreshStyle() }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingAreaRef { removeTrackingArea(existing) }
+        let area = NSTrackingArea(rect: .zero,
+                                  options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingAreaRef = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        hovering = true
+        refreshStyle()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hovering = false
+        refreshStyle()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshStyle()
+    }
+
+    override var focusRingMaskBounds: NSRect { bounds }
+
+    override func drawFocusRingMask() {
+        NSBezierPath(roundedRect: bounds, xRadius: 7, yRadius: 7).fill()
+    }
+
+    /// 换标题（折叠按钮在「隐藏历史」/「显示历史」之间切换）：
+    /// 标题变了要重新算宽度并重绘，否则 attributedTitle 还是旧文字。
+    func updateTitle(_ text: String) {
+        guard title != text else { return }
+        title = text
+        invalidateIntrinsicContentSize()
+        refreshStyle()
+    }
+
+    private func refreshStyle() {
+        guard let layer = layer else { return }
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let fill: NSColor
+        let border: NSColor
+        if !isEnabled {
+            fill = dark ? NSColor(white: 0.10, alpha: 1) : NSColor(white: 0.90, alpha: 1)
+            border = borderColor(dark: dark).withAlphaComponent(0.5)
+        } else if isHighlighted {
+            fill = dark ? NSColor(white: 0.08, alpha: 1) : NSColor(white: 0.86, alpha: 1)
+            border = borderColor(dark: dark)
+        } else if hovering {
+            fill = dark ? NSColor(white: 0.18, alpha: 1) : NSColor(white: 0.98, alpha: 1)
+            border = borderColor(dark: dark)
+        } else {
+            fill = dark ? NSColor(white: 0.12, alpha: 1) : NSColor(white: 0.94, alpha: 1)
+            border = borderColor(dark: dark)
+        }
+        layer.backgroundColor = fill.cgColor
+        layer.cornerRadius = 7
+        layer.borderWidth = 1
+        layer.borderColor = border.cgColor
+
+        let ink = dark ? mintInk : darkened(mintInk, by: 0.2)
+        let color = isEnabled ? ink : ink.withAlphaComponent(0.35)
+        attributedTitle = NSAttributedString(string: title, attributes: [
+            .font: font ?? NSFont.systemFont(ofSize: 13, weight: .medium),
+            .foregroundColor: color,
+        ])
+    }
+
+    private func borderColor(dark: Bool) -> NSColor {
+        dark ? NSColor(white: 0.28, alpha: 1) : NSColor.separatorColor
+    }
+
+    private func darkened(_ color: NSColor, by amount: CGFloat) -> NSColor {
+        guard let rgb = color.usingColorSpace(.deviceRGB) else { return color }
+        let scale = 1 - amount
+        return NSColor(calibratedRed: rgb.redComponent * scale,
+                       green: rgb.greenComponent * scale,
+                       blue: rgb.blueComponent * scale,
+                       alpha: rgb.alphaComponent)
+    }
+}
+
 final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
-                                    NSTableViewDataSource, NSTableViewDelegate {
+                                    NSTableViewDataSource, NSTableViewDelegate,
+                                    NSSplitViewDelegate {
     private var window: NSWindow!
     private let repositoryField = NSTextField()
     private let promptField = NSTextField()
     private let outputView = NSTextView()
+    private let chatStackView = NSStackView()
+    private let chatScrollView = NSScrollView()
     private let statusLabel = NSTextField(labelWithString: "就绪")
     private let historySearchField = NSSearchField()
     private let historyTableView = NSTableView()
@@ -657,6 +1057,28 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
     private var statusAfterHistoryRefresh: String?
     private var sessionID = UUID().uuidString
     private var sessionRepository = ""
+
+    // 聊天计时：一个会话同时只允许一个计时器（0.2s 刷新只改等待行）
+    private var pendingRow: ChatPendingRow?
+    private var chatTimer: Timer?
+    private var chatStartUptime: TimeInterval = 0
+    private var chatTimerSerial = 0
+    /// 本次请求是否已经开始计时：失败/取消时用它判断能不能给出耗时数字
+    private var chatStarted = false
+
+    // 历史侧栏折叠：宽度由 NSSplitView 自己管，这里只记「展开时该多宽」
+    private var historySplitView: NSSplitView!
+    private var historySidebar: NSView!
+    private var toggleSidebarButton: NSButton!
+    private var sidebarExpandedWidth: CGFloat = CodeVigilAgentDelegate.defaultSidebarWidth
+    private var sidebarCollapsed = false
+    private var sidebarAnimating = false
+
+    static let defaultSidebarWidth: CGFloat = 260
+    static let sidebarMinWidth: CGFloat = 200
+    static let sidebarMaxWidth: CGFloat = 420
+    private static let sidebarCollapsedKey = "historySidebarCollapsed"
+    private static let sidebarWidthKey = "historySidebarWidth"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildWindow()
@@ -711,6 +1133,16 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
         subtitle.lineBreakMode = .byTruncatingTail
         statusLabel.setContentHuggingPriority(.required, for: .horizontal)
         statusLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        // 折叠按钮放在顶栏最左侧：它属于 mainPanel，侧栏收起后依然可见，
+        // 否则用户没有办法把历史栏展开回来。
+        toggleSidebarButton = makeButton("隐藏历史", action: #selector(toggleHistorySidebar))
+        toggleSidebarButton.keyEquivalent = "b"
+        toggleSidebarButton.keyEquivalentModifierMask = [.command]
+        toggleSidebarButton.setContentHuggingPriority(.required, for: .horizontal)
+        toggleSidebarButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        header.insertArrangedSubview(toggleSidebarButton, at: 0)
+        header.setCustomSpacing(16, after: toggleSidebarButton)
 
         repositoryField.placeholderString = "选择要审查的 Git 仓库目录"
         repositoryField.font = .systemFont(ofSize: 13)
@@ -773,6 +1205,37 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
         scrollView.borderType = .bezelBorder
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
+        // 聊天区：NSScrollView + 垂直 NSStackView，每条消息一行；审查结果仍写在 outputView。
+        chatStackView.orientation = .vertical
+        chatStackView.alignment = .width
+        chatStackView.spacing = 10
+        chatStackView.translatesAutoresizingMaskIntoConstraints = false
+        let chatDocument = ChatDocumentView()
+        chatDocument.translatesAutoresizingMaskIntoConstraints = false
+        chatDocument.addSubview(chatStackView)
+        chatScrollView.documentView = chatDocument
+        chatScrollView.hasVerticalScroller = true
+        chatScrollView.borderType = .noBorder
+        chatScrollView.drawsBackground = true
+        chatScrollView.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 1)
+        chatScrollView.translatesAutoresizingMaskIntoConstraints = false
+        let chatBottomPin = chatStackView.bottomAnchor.constraint(equalTo: chatDocument.bottomAnchor, constant: -8)
+        // 滚动视图可能在内容不足一屏时把文档视图拉高；让底部约束可被破坏，
+        // 消息行保持自高度，不会被均匀拉伸。
+        chatBottomPin.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            chatStackView.leadingAnchor.constraint(equalTo: chatDocument.leadingAnchor),
+            chatStackView.trailingAnchor.constraint(equalTo: chatDocument.trailingAnchor),
+            chatStackView.topAnchor.constraint(equalTo: chatDocument.topAnchor, constant: 8),
+            chatBottomPin,
+            chatDocument.widthAnchor.constraint(equalTo: chatScrollView.contentView.widthAnchor),
+        ])
+
+        let outputCaption = NSTextField(labelWithString: "审查结果 / 运行输出")
+        outputCaption.font = .systemFont(ofSize: 11, weight: .medium)
+        outputCaption.textColor = .secondaryLabelColor
+        outputCaption.translatesAutoresizingMaskIntoConstraints = false
+
         appendOutput("欢迎使用 CodeVigil Agent。\n")
         appendOutput("选择 Git 仓库以审查改动；使用 AI 前请在模型设置中填写 API 信息。\n\n")
 
@@ -832,21 +1295,34 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
         sidebarStack.spacing = 9
         sidebarStack.translatesAutoresizingMaskIntoConstraints = false
         let sidebar = NSView()
-        sidebar.translatesAutoresizingMaskIntoConstraints = false
+        // 侧栏宽高由 NSSplitView 直接排（见下方 splitView 注释），不参与 Auto Layout 定尺寸
+        sidebar.translatesAutoresizingMaskIntoConstraints = true
         sidebar.addSubview(sidebarStack)
+        // 折叠时侧栏宽度会被压到 0；左右各 10pt 的内边距在 0 宽度下会让
+        // 栈宽变成 -20pt。把尾部约束降一档（750），折叠瞬间它自动让位，
+        // 控制台不会刷 unsatisfiable constraints。
+        let sidebarStackTrailing = sidebarStack.trailingAnchor.constraint(
+            equalTo: sidebar.trailingAnchor, constant: -10)
+        sidebarStackTrailing.priority = .defaultHigh
         NSLayoutConstraint.activate([
             sidebarStack.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 10),
-            sidebarStack.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -10),
+            sidebarStackTrailing,
             sidebarStack.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 12),
             sidebarStack.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor, constant: -12),
             historySearchField.heightAnchor.constraint(equalToConstant: 30),
         ])
 
-        let mainStack = NSStackView(views: [header, repoRow, actionRow, scrollView, chatRow])
+        let mainStack = NSStackView(views: [header, repoRow, actionRow, chatScrollView, outputCaption,
+                                           scrollView, chatRow])
         mainStack.orientation = .vertical
         mainStack.alignment = .width
         mainStack.spacing = 14
         mainStack.translatesAutoresizingMaskIntoConstraints = false
+        // 多出来的高度给聊天区：输出区固定偏矮，聊天区吃掉剩余空间。
+        chatScrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        scrollView.setContentHuggingPriority(.defaultHigh, for: .vertical)
+        let outputHeight = scrollView.heightAnchor.constraint(equalToConstant: 150)
+        outputHeight.priority = .defaultHigh
         let mainPanel = NSView()
         mainPanel.translatesAutoresizingMaskIntoConstraints = false
         mainPanel.addSubview(mainStack)
@@ -855,7 +1331,9 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
             mainStack.trailingAnchor.constraint(equalTo: mainPanel.trailingAnchor, constant: -18),
             mainStack.topAnchor.constraint(equalTo: mainPanel.topAnchor, constant: 16),
             mainStack.bottomAnchor.constraint(equalTo: mainPanel.bottomAnchor, constant: -16),
-            scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 320),
+            chatScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
+            scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 90),
+            outputHeight,
             repositoryField.heightAnchor.constraint(equalToConstant: 30),
             promptField.heightAnchor.constraint(equalToConstant: 30),
         ])
@@ -864,11 +1342,19 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
         splitView.isVertical = true
         splitView.dividerStyle = .thin
         splitView.translatesAutoresizingMaskIntoConstraints = false
+        // 两个子视图交给 NSSplitView 按 frame 排布（translatesAutoresizingMask…= true）：
+        //   · 分隔线可以拖动，拖完的宽度由 splitViewDidResizeSubviews 记下来；
+        //   · 折叠走 setPosition(0) + isHidden，分栏宽度为 0 时分隔线不占位；
+        //   · 子视图身上没有宽度约束，就不会和 NSSplitView 自己的布局约束打架。
+        mainPanel.translatesAutoresizingMaskIntoConstraints = true
         splitView.addSubview(sidebar)
         splitView.addSubview(mainPanel)
-        NSLayoutConstraint.activate([
-            sidebar.widthAnchor.constraint(equalToConstant: 255),
-        ])
+        splitView.delegate = self
+        historySplitView = splitView
+        historySidebar = sidebar
+        // 折叠动画期间侧栏会被压到很窄：把内容裁在自身范围里，别压到聊天区上
+        sidebar.wantsLayer = true
+        sidebar.layer?.masksToBounds = true
         content.addSubview(splitView)
         NSLayoutConstraint.activate([
             splitView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -884,19 +1370,138 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
             defer: false
         )
         window.title = "CodeVigil Agent"
-        window.minSize = NSSize(width: 760, height: 520)
+        // 800pt：折叠侧栏后右侧内容仍能完整排下（三按钮行 + 输入行不换行、不挤压）
+        window.minSize = NSSize(width: 800, height: 520)
         window.center()
         window.contentView = content
         window.appearance = NSAppearance(named: .darkAqua)
         window.delegate = self
+        // 开局先渲染一次标题与仓库行，聊天区不会是一片空白。
+        renderConversation()
+        // 先让窗口把内容真正摆好，再按上次的折叠状态定分栏，避免启动时闪一下宽侧栏
+        window.layoutIfNeeded()
+        restoreSidebarState()
     }
 
     private func makeButton(_ title: String, action: Selector) -> NSButton {
-        let button = NSButton(title: title, target: self, action: action)
-        button.bezelStyle = .rounded
-        button.font = .systemFont(ofSize: 13, weight: .medium)
-        button.contentTintColor = NSColor(calibratedRed: 0.48, green: 0.92, blue: 0.78, alpha: 1)
-        return button
+        StyledButton(title: title, target: self, action: action)
+    }
+
+    // MARK: - 历史侧栏折叠 / 展开
+
+    /// 启动时按 UserDefaults 还原：historySidebarCollapsed = true 则直接收起。
+    private func restoreSidebarState() {
+        let stored = UserDefaults.standard.double(forKey: Self.sidebarWidthKey)
+        if stored >= Double(Self.sidebarMinWidth), stored <= Double(Self.sidebarMaxWidth) {
+            sidebarExpandedWidth = CGFloat(stored)
+        } else {
+            sidebarExpandedWidth = Self.defaultSidebarWidth
+        }
+        let collapsed = UserDefaults.standard.bool(forKey: Self.sidebarCollapsedKey)
+        setSidebarCollapsed(collapsed, animated: false)
+    }
+
+    @objc private func toggleHistorySidebar() {
+        setSidebarCollapsed(!sidebarCollapsed, animated: true)
+    }
+
+    /// 折叠 = 分栏位置推到 0 并把侧栏藏起来（分隔线随之不占位）；
+    /// 展开 = 还原到折叠前的宽度（默认 260pt，用户拖过就用拖后的宽度）。
+    /// 只动 NSSplitView 的分栏位置，没有改任何约束，所以不会产生布局冲突。
+    private func setSidebarCollapsed(_ collapsed: Bool, animated: Bool) {
+        guard let splitView = historySplitView, let sidebar = historySidebar else { return }
+        sidebarCollapsed = collapsed
+        UserDefaults.standard.set(collapsed, forKey: Self.sidebarCollapsedKey)
+        updateSidebarButton()
+        let targetWidth = collapsed ? 0 : max(Self.sidebarMinWidth,
+                                              min(Self.sidebarMaxWidth, sidebarExpandedWidth))
+        guard animated else {
+            sidebar.isHidden = collapsed
+            splitView.setPosition(targetWidth, ofDividerAt: 0)
+            splitView.layoutSubtreeIfNeeded()
+            reflowChatAfterSidebarResize()
+            return
+        }
+
+        sidebarAnimating = true
+        if !collapsed { sidebar.isHidden = false }
+        // 0.2s 动画：animator 代理是异步的，动画期间窗口照常接收点击与键盘输入
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.allowsImplicitAnimation = true
+            splitView.animator().setPosition(targetWidth, ofDividerAt: 0)
+        }, completionHandler: { [weak self] in
+            guard let self = self else { return }
+            self.sidebarAnimating = false
+            // 连点 ⌘B 时以最后一次状态为准，别让旧动画的回调把侧栏又藏起来
+            if self.sidebarCollapsed == collapsed { sidebar.isHidden = collapsed }
+            self.reflowChatAfterSidebarResize()
+        })
+        // 动画结束后再补一帧重排：分栏宽度刚变时换行宽度还没算完
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) { [weak self] in
+            self?.reflowChatAfterSidebarResize()
+        }
+    }
+
+    private func updateSidebarButton() {
+        guard let button = toggleSidebarButton else { return }
+        let title = sidebarCollapsed ? "显示历史" : "隐藏历史"
+        button.toolTip = sidebarCollapsed ? "显示历史侧栏（⌘B）" : "隐藏历史侧栏（⌘B）"
+        (button as? StyledButton)?.updateTitle(title)
+        button.setAccessibilityLabel(title)
+    }
+
+    /// 宽度变了要把消息重新折行：气泡与正文的最大宽度都按新宽度重算，
+    /// 否则长消息会保持旧宽度被裁掉或撑出横向滚动条。
+    private func reflowChatAfterSidebarResize() {
+        chatStackView.needsLayout = true
+        chatScrollView.documentView?.needsLayout = true
+        for row in chatStackView.arrangedSubviews {
+            row.needsLayout = true
+        }
+        chatScrollView.layoutSubtreeIfNeeded()
+        chatStackView.layoutSubtreeIfNeeded()
+        // 行内标签更新 preferredMaxLayoutWidth 后行高会变，补一帧让栈重新量高
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.chatStackView.needsLayout = true
+            self.chatScrollView.layoutSubtreeIfNeeded()
+        }
+    }
+
+    func splitView(_ splitView: NSSplitView, canCollapseSubview subview: NSView) -> Bool {
+        // 允许 setPosition(0) 把侧栏收起（折叠按钮走这条路），
+        // 但不让双击分隔线绕过状态机，否则按钮文字和 UserDefaults 会和实际状态不一致
+        subview === historySidebar
+    }
+
+    func splitView(_ splitView: NSSplitView, shouldCollapseSubview subview: NSView,
+                   forDoubleClickOnDividerAt dividerIndex: Int) -> Bool {
+        false
+    }
+
+    func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat,
+                   ofSubviewAt dividerIndex: Int) -> CGFloat {
+        Self.sidebarMinWidth
+    }
+
+    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat,
+                   ofSubviewAt dividerIndex: Int) -> CGFloat {
+        // 右侧至少留 480pt：窗口最小 800pt 时侧栏不会被拖到把聊天区挤扁
+        let limit = max(Self.sidebarMinWidth, splitView.bounds.width - 480)
+        return min(proposedMaximumPosition, min(Self.sidebarMaxWidth, limit))
+    }
+
+    /// 用户拖动分隔线后记下新宽度，下次展开按这个宽度还原。
+    func splitViewDidResizeSubviews(_ notification: Notification) {
+        guard !sidebarAnimating, !sidebarCollapsed,
+              let sidebar = historySidebar, !sidebar.isHidden else { return }
+        let width = sidebar.frame.width
+        guard width >= Self.sidebarMinWidth,
+              abs(width - sidebarExpandedWidth) > 0.5 else { return }
+        sidebarExpandedWidth = width
+        UserDefaults.standard.set(Double(width), forKey: Self.sidebarWidthKey)
     }
 
     @objc private func chooseRepository() {
@@ -992,8 +1597,10 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
         let sessionName = currentSessionName ?? "desktop-\(sessionID)"
         currentSessionName = sessionName
         let repositoryPath = repository.isEmpty ? "" : URL(fileURLWithPath: repository).standardizedFileURL.path
-        currentMessages.append(["role": "user", "content": prompt, "status": "running"])
+        currentMessages.append(["role": "user", "content": prompt, "status": "running",
+                                "started_at": ChatTiming.isoString(Date())])
         renderConversation()
+        beginChatTiming()
         let arguments = ["chat", "--message", prompt, "--network", "auto",
                          "--session", sessionName, "--repository", repositoryPath, "--json"]
         runAgent(arguments: arguments, task: .chat(prompt, sessionName))
@@ -1001,6 +1608,8 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
 
     @objc private func newConversation() {
         guard runningProcess == nil else { return }
+        stopChatTimer()
+        pendingRow = nil
         sessionID = UUID().uuidString
         currentSessionName = nil
         currentTitle = "新对话"
@@ -1154,42 +1763,125 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
         openSession(historyRows[table.selectedRow].name)
     }
 
-    /// restoredAt 非空时在顶部追加「恢复时间」一行（打开历史会话时传入）。
-    private func renderConversation(restoredAt: String? = nil) {
-        outputView.string = ""
-        appendOutput("\(currentTitle)\n", color: NSColor(calibratedRed: 0.48, green: 0.92, blue: 0.78, alpha: 1), bold: true)
-        let repository = repositoryField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        appendOutput("仓库：\(repository.isEmpty ? "未关联" : repository)\n", color: .secondaryLabelColor)
-        if let restoredAt = restoredAt, !restoredAt.isEmpty {
-            appendOutput("恢复时间：\(restoredAt)\n", color: .secondaryLabelColor)
+    /// 渲染当前会话。消息下方只保留耗时：用户消息无时间行，
+    /// Agent 回复一行「已完成 3.2s」；旧会话没有 elapsed_ms 就没有这一行。
+    private func renderConversation() {
+        pendingRow = nil
+        chatStackView.arrangedSubviews.forEach {
+            chatStackView.removeArrangedSubview($0)
+            $0.removeFromSuperview()
         }
-        appendOutput("\n")
+        let repository = repositoryField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let headerRow = ChatHeaderRow(title: currentTitle, repository: repository)
+        chatStackView.addArrangedSubview(headerRow)
+        chatStackView.setCustomSpacing(14, after: headerRow)
         for message in currentMessages {
             let role = message["role"] as? String ?? ""
             let content = message["content"] as? String ?? ""
             let state = message["status"] as? String ?? "completed"
             if role == "user" {
-                appendOutput("你\n", color: NSColor(calibratedRed: 0.48, green: 0.92, blue: 0.78, alpha: 1), bold: true)
-                appendOutput(content + "\n")
-                switch state {
-                case "running": appendOutput("Agent 正在生成…\n\n", color: .secondaryLabelColor)
-                case "failed":
-                    appendOutput("请求失败；未生成成功回复。\n", color: .systemRed, bold: true)
-                    if let error = message["error"] as? String { appendOutput(error + "\n\n", color: .systemRed) }
-                case "interrupted": appendOutput("请求中断；没有成功回复。\n\n", color: .systemOrange)
-                default: appendOutput("\n")
+                chatStackView.addArrangedSubview(ChatBubbleRow(text: content))
+                if state == "failed" || state == "interrupted" {
+                    let seconds = ChatTiming.milliseconds(message["elapsed_ms"]).map { Double($0) / 1000 }
+                    let prefix = state == "failed" ? "失败" : "已取消"
+                    let title = seconds.map { prefix + " " + ChatTiming.text($0) } ?? prefix
+                    let detail = (message["error"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    chatStackView.addArrangedSubview(ChatResultRow(
+                        statusText: title,
+                        detail: (detail?.isEmpty == false) ? detail : nil,
+                        color: state == "failed" ? .systemRed : .systemOrange))
                 }
             } else if role == "assistant", state == "completed" {
-                appendOutput("Agent\n", color: NSColor(calibratedRed: 0.48, green: 0.92, blue: 0.78, alpha: 1), bold: true)
-                appendOutput(content + "\n\n")
+                // 旧会话没有 elapsed_ms：不显示耗时行，绝不补 0.0s 或占位符
+                let seconds = ChatTiming.milliseconds(message["elapsed_ms"]).map { Double($0) / 1000 }
+                chatStackView.addArrangedSubview(ChatAgentRow(
+                    text: content,
+                    statusText: seconds.map { "已完成 " + ChatTiming.text($0) }))
             }
         }
-        // 打开历史会话后自动滚到最新一条消息：先确保长文本排版完成再滚动，
-        // 否则超长会话可能停在中间位置
-        if let container = outputView.textContainer {
-            outputView.layoutManager?.ensureLayout(for: container)
+        // 长会话要等排版完成才能滚到底，再补一帧防止滚动条位置还没更新。
+        chatScrollView.layoutSubtreeIfNeeded()
+        scrollChatToBottom()
+        DispatchQueue.main.async { [weak self] in self?.scrollChatToBottom() }
+    }
+
+    private func scrollChatToBottom() {
+        guard let document = chatScrollView.documentView else { return }
+        let maxY = max(0, document.bounds.height - chatScrollView.contentView.bounds.height)
+        chatScrollView.contentView.scroll(to: NSPoint(x: 0, y: maxY))
+        chatScrollView.reflectScrolledClipView(chatScrollView.contentView)
+    }
+
+    // MARK: - 聊天计时
+
+    /// 发送后开始计时：等待行插到会话末尾，每 0.2 秒只刷新这一行。
+    private func beginChatTiming() {
+        stopChatTimer()
+        clearPendingRow()
+        chatStartUptime = ProcessInfo.processInfo.systemUptime
+        chatStarted = true
+        let row = ChatPendingRow()
+        pendingRow = row
+        chatStackView.addArrangedSubview(row)
+        row.update(seconds: 0)
+        chatTimerSerial += 1
+        let serial = chatTimerSerial
+        let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
+            guard let self = self, self.chatTimerSerial == serial else { return }
+            self.tickChatTimer()
         }
-        outputView.scrollRangeToVisible(NSRange(location: (outputView.string as NSString).length, length: 0))
+        RunLoop.main.add(timer, forMode: .common)   // 滚动/缩放时也继续走
+        chatTimer = timer
+        NSLog("%@", "[ChatTimer] start #\(serial)")
+        chatScrollView.layoutSubtreeIfNeeded()
+        scrollChatToBottom()
+    }
+
+    private func tickChatTimer() {
+        guard let row = pendingRow else { return }
+        row.update(seconds: ChatTiming.elapsed(since: chatStartUptime))
+    }
+
+    private func stopChatTimer() {
+        // 只要停表就认为这次请求已经结束：完成 / 失败 / 取消 / 关窗都走这里，
+        // 四条路径都不会留下还在跑的 Timer。
+        chatStarted = false
+        guard let timer = chatTimer else { return }
+        timer.invalidate()
+        chatTimer = nil
+        NSLog("%@", "[ChatTimer] stop #\(chatTimerSerial)")
+    }
+
+    /// 取本次请求的耗时并结束计时（只读单调时钟，退出后不会再有 Timer 在跑）。
+    /// 没开始过计时就返回 nil：失败在发请求之前时宁可不写数字，也不编一个 0.0s。
+    private func takeChatElapsed() -> TimeInterval? {
+        guard chatStarted else { return nil }
+        let seconds = ChatTiming.elapsed(since: chatStartUptime)
+        stopChatTimer()
+        return seconds
+    }
+
+    private func clearPendingRow() {
+        guard let row = pendingRow else { return }
+        chatStackView.removeArrangedSubview(row)
+        row.removeFromSuperview()
+        pendingRow = nil
+    }
+
+    /// 请求失败：停表，把最后一条用户消息标成失败并带上耗时，会话行显示「失败 X.Xs」。
+    private func markLastUserMessageFailed(_ reason: String) {
+        let seconds = takeChatElapsed()
+        if let index = currentMessages.lastIndex(where: {
+            $0["role"] as? String == "user" && $0["status"] as? String == "running"
+        }) {
+            currentMessages[index]["status"] = "failed"
+            currentMessages[index]["error"] = reason
+            if let seconds = seconds {
+                currentMessages[index]["elapsed_ms"] = Int((seconds * 1000).rounded())
+                currentMessages[index]["finished_at"] = ChatTiming.isoString(Date())
+            }
+        }
+        renderConversation()
     }
 
     @objc private func clearDisplay() {
@@ -1199,7 +1891,13 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
         alert.addButton(withTitle: "清空显示")
         alert.addButton(withTitle: "取消")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
+        stopChatTimer()
+        pendingRow = nil
         outputView.string = ""
+        chatStackView.arrangedSubviews.forEach {
+            chatStackView.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
         setStatus("显示已清空；会话保留")
     }
 
@@ -1269,13 +1967,21 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: workingDirectory.path, isDirectory: &isDirectory),
               isDirectory.boolValue else {
-            appendOutput("\n找不到工作目录：\(workingDirectory.path)\n", color: .systemRed)
+            if case .chat = task {
+                markLastUserMessageFailed("找不到工作目录：\(workingDirectory.path)")
+            } else {
+                appendOutput("\n找不到工作目录：\(workingDirectory.path)\n", color: .systemRed)
+            }
             setStatus("目录不存在")
             return
         }
 
         guard let pythonPath = pythonRuntimePath() else {
-            appendOutput("\n找不到 Python 3。请先安装 Python 3.7+。\n", color: .systemRed)
+            if case .chat = task {
+                markLastUserMessageFailed("找不到 Python 3。请先安装 Python 3.7+。")
+            } else {
+                appendOutput("\n找不到 Python 3。请先安装 Python 3.7+。\n", color: .systemRed)
+            }
             setStatus("缺少 Python")
             return
         }
@@ -1317,7 +2023,13 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
         process.currentDirectoryURL = workingDirectory
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
-        process.environment = backendEnvironment()
+        var environment = backendEnvironment()
+        if case .chat = task {
+            // 把「点发送那一刻」的单调时钟交给 CLI：它据此算 elapsed_ms，
+            // 存进会话的数字才和界面上正在跳的数字是同一个口径（都含解释器启动）。
+            environment["REVIEWAGENT_CLIENT_START"] = String(chatStartUptime)
+        }
+        process.environment = environment
 
         switch task {
         case .chat:
@@ -1382,10 +2094,15 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
                     self.setControlsRunning(false)
                     if self.cancelRequested {
                         if case .chat = task {
+                            let seconds = self.takeChatElapsed()
                             if let index = self.currentMessages.lastIndex(where: {
                                 $0["role"] as? String == "user" && $0["status"] as? String == "running"
                             }) {
                                 self.currentMessages[index]["status"] = "interrupted"
+                                if let seconds = seconds {
+                                    self.currentMessages[index]["elapsed_ms"] = Int((seconds * 1000).rounded())
+                                    self.currentMessages[index]["finished_at"] = ChatTiming.isoString(Date())
+                                }
                             }
                             self.renderConversation()
                             self.statusAfterHistoryRefresh = "已取消"
@@ -1416,7 +2133,11 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
             runningReaders = nil
             activeTaskID = nil
             setControlsRunning(false)
-            appendOutput("\n启动失败：\(error.localizedDescription)\n", color: .systemRed)
+            if case .chat = task {
+                markLastUserMessageFailed("启动失败：\(error.localizedDescription)")
+            } else {
+                appendOutput("\n启动失败：\(error.localizedDescription)\n", color: .systemRed)
+            }
             setStatus("启动失败")
         }
     }
@@ -1428,30 +2149,52 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
 
     private func finishTask(_ task: AgentTask, status: Int32, stdout: Data, stderr: Data) {
         switch task {
-        case .chat(_, let name):
+        case .chat(let prompt, _):
             guard let payload = try? JSONSerialization.jsonObject(with: stdout) as? [String: Any] else {
-                appendOutput("请求失败：CLI 返回无效 JSON。\n\(safeDiagnostic(stderr))\n", color: .systemRed)
+                markLastUserMessageFailed("CLI 返回无效 JSON。\(safeDiagnostic(stderr))")
                 setStatus("请求失败")
-                openSessionAfterRefresh = name
+                statusAfterHistoryRefresh = "请求失败"
                 refreshSessions()
                 return
             }
             guard status == 0, payload["ok"] as? Bool == true else {
-                appendOutput("Agent 请求失败：\(payload["error"] as? String ?? "CLI 以退出码 \(status) 结束。")\n",
-                             color: .systemRed)
+                markLastUserMessageFailed(payload["error"] as? String ?? "CLI 以退出码 \(status) 结束。")
                 setStatus("请求失败")
-                openSessionAfterRefresh = name
+                statusAfterHistoryRefresh = "请求失败"
                 refreshSessions()
                 return
             }
-            guard payload["reply"] as? String != nil else {
-                appendOutput("请求失败：JSON 响应缺少 Agent 回复。\n", color: .systemRed)
+            guard let reply = payload["reply"] as? String else {
+                markLastUserMessageFailed("JSON 响应缺少 Agent 回复。")
                 setStatus("请求失败")
-                openSessionAfterRefresh = name
+                statusAfterHistoryRefresh = "请求失败"
                 refreshSessions()
                 return
             }
-            openSessionAfterRefresh = name
+            // 计时只覆盖「请求发出 → 回复结束」；完成后立刻停表，界面里的数字不再变化。
+            // 优先用 CLI 存进会话的 elapsed_ms：这样界面上刚看到的数字和以后从历史里
+            // 读回来的数字是同一个（CLI 的起点由 REVIEWAGENT_CLIENT_START 对齐到点发送那一刻）。
+            let localSeconds = ChatTiming.elapsed(since: chatStartUptime)
+            let seconds = ChatTiming.milliseconds(payload["elapsed_ms"]).map { Double($0) / 1000 }
+                ?? localSeconds
+            let finishedAt = (payload["finished_at"] as? String) ?? ChatTiming.isoString(Date())
+            stopChatTimer()
+            currentMessages.append([
+                "role": "assistant", "content": reply, "status": "completed",
+                "finished_at": finishedAt,
+                "elapsed_ms": Int((seconds * 1000).rounded()),
+            ])
+            if let index = currentMessages.lastIndex(where: {
+                $0["role"] as? String == "user" && $0["status"] as? String == "running"
+            }) {
+                currentMessages[index]["status"] = "completed"
+            }
+            if currentTitle == "新对话" {
+                let collapsed = prompt.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+                if !collapsed.isEmpty { currentTitle = String(collapsed.prefix(64)) }
+            }
+            renderConversation()
+            statusAfterHistoryRefresh = "完成"
             refreshSessions()
         case .review:
             renderReview(status: status, stdout: stdout, stderr: stderr)
@@ -1515,9 +2258,7 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
             sessionRepository = repository
             if !repository.isEmpty { UserDefaults.standard.set(repository, forKey: "lastRepositoryPath") }
             if name.hasPrefix("desktop-") { sessionID = String(name.dropFirst("desktop-".count)) }
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd HH:mm"
-            renderConversation(restoredAt: formatter.string(from: Date()))
+            renderConversation()
             suppressHistorySelection = true
             if let row = historyRows.firstIndex(where: { $0.name == name }) {
                 historyTableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
@@ -1714,6 +2455,8 @@ final class CodeVigilAgentDelegate: NSObject, NSApplicationDelegate, NSWindowDel
     }
 
     private func stopProcessForTermination() {
+        stopChatTimer()          // 关窗/退出时先停表，避免 Timer 残留到进程结束
+        pendingRow = nil
         guard let process = runningProcess else { return }
         activeTaskID = nil
         process.terminate()

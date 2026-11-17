@@ -38,3 +38,10 @@ def sort_key(feature: Feature) -> tuple:
     group = feature.group if feature.group in GROUPS else 'zzz'
     index = GROUPS.index(group) if group in GROUPS else len(GROUPS)
     return (index, feature.order, feature.label)
+
+
+def group_order(features: list) -> list[str]:
+    """按 GROUPS 的顺序排分组；没列进去的排最后。"""
+    seen = [f.group for f in features]
+    ordered = [g for g in GROUPS if g in seen]
+    return ordered + [g for g in dict.fromkeys(seen) if g not in ordered]

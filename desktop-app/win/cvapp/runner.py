@@ -23,6 +23,7 @@ class Runner:
         self._on_done = on_done
         self._queue: queue.Queue = queue.Queue()
         self._proc: subprocess.Popen | None = None
+        self._sink = on_line          # 本轮输出的去处：默认写输出区，聊天时写气泡缓冲区
         self._tick()
 
     # ------------------------------------------------------------ 状态
@@ -31,9 +32,11 @@ class Runner:
         return self._proc is not None and self._proc.poll() is None
 
     # ------------------------------------------------------------ 控制
-    def start(self, args: list, cwd: str, label: str, columns: int | None = None) -> bool:
+    def start(self, args: list, cwd: str, label: str, columns: int | None = None,
+              sink=None) -> bool:
         if self.busy:
             return False
+        self._sink = sink or self._on_line
 
         env = os.environ.copy()
         env['PYTHONIOENCODING'] = 'utf-8'
@@ -88,8 +91,9 @@ class Runner:
             while True:
                 kind, payload = self._queue.get_nowait()
                 if kind == 'out':
-                    self._on_line(payload)
+                    self._sink(payload)
                 else:
+                    self._sink = self._on_line
                     self._on_done(int(payload))
         except queue.Empty:
             pass

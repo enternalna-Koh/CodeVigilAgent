@@ -346,7 +346,7 @@ def open_settings(app) -> None:
 FEATURES = [
     Feature(
         id='settings.model', group='系统', label='模型设置',
-        handler=open_settings, order=10, shortcut='<Control-comma>',
+        handler=open_settings, order=10, shortcut='<Control-comma>', placement='toolbar',
         hint='下拉选择服务商与模型 / 改 API Key（与终端版共用配置）',
     ),
 ]

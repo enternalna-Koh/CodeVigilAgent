@@ -14,10 +14,12 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 from . import VERSION, config, theme
+from .action_bar import build_input_actions, build_toolbar
+from .chat_section import ChatSection
 from .panels import PanelHost
 from .runner import Runner
-from .widgets import FlatButton, OutputPane, divider, section_label
-
+from .features.base import group_order
+from .widgets import FlatButton, OutputPane, PillButton, caption_label, divider, section_label
 
 class Shell:
     def __init__(self, root: tk.Tk, features: list, load_errors: list[str] | None = None):
@@ -34,19 +36,15 @@ class Shell:
         # 当前打开的历史会话（空 = 新会话）。由功能层写，chat 发送时读。
         self.current_session = ''
         self.session_title = ''
-
         self.runner = Runner(root, self.append, self._on_start, self._on_done)
 
         root.title('CodeVigil Agent')
         root.geometry('1200x860')
         root.minsize(940, 620)
         root.configure(bg=theme.BG)
-        # 高 DPI 屏上窗口高度会被系统压到逻辑 700 以内，底部输入行会被裁掉。
-        # 直接最大化，别跟 DPI 换算较劲。
-        try:
-            root.state('zoomed')
-        except Exception:                               # noqa: BLE001
-            pass
+        # 不用 zoomed：最大化后窗口比工作区高，底部输入行会被顶到任务栏下面。
+        root.geometry('%dx%d+40+20' % (max(940, root.winfo_screenwidth() - 80),
+                                       max(560, root.winfo_screenheight() - 160)))
 
         self._build()
         self._bind_shortcuts()
@@ -91,9 +89,8 @@ class Shell:
             fill='x', padx=12, pady=(12, 0))
         divider(side).pack(fill='x', padx=12, pady=(8, 0))
 
-        sidebar_features = [f for f in self.features if f.placement == 'sidebar']
-        for group in self._group_order(sidebar_features):
-            members = [f for f in sidebar_features if f.group == group]
+        for group in group_order([f for f in self.features if f.placement == 'sidebar']):
+            members = [f for f in self.features if f.placement == 'sidebar' and f.group == group]
             if not members:
                 continue
             section_label(side, group).pack(fill='x', padx=6, pady=(12, 2))
@@ -116,11 +113,12 @@ class Shell:
         main = tk.Frame(parent, bg=theme.BG)
         main.grid(row=0, column=1, sticky='nsew')
         main.grid_columnconfigure(0, weight=1)
-        main.grid_rowconfigure(1, weight=1)              # 输出区吃掉多余高度
+        main.grid_rowconfigure(2, weight=4, minsize=240)   # 聊天区吃大头
+        main.grid_rowconfigure(4, weight=1, minsize=100)   # 输出区留一小块
 
         # 右侧面板列：默认不占位，功能按钮展开时才出现
         self.panel_host = PanelHost(main, self)
-        self.panel_host.frame.grid(row=0, column=2, rowspan=3, sticky='ns',
+        self.panel_host.frame.grid(row=0, column=2, rowspan=6, sticky='ns',
                                    padx=(theme.GAP, 0))
         self.panel_host.frame.grid_remove()
 
@@ -139,13 +137,20 @@ class Shell:
         FlatButton(repo_row, '选择目录', self.pick_repo, accent=True,
                    font=self.font_ui).pack(side='left')
 
+        build_toolbar(main, self)
+
+        # ---- 聊天区（气泡）----
+        self.chat_section = ChatSection(main, self)
+        self.chat = self.chat_section.pane
+
         # ---- 输出区 ----
+        caption_label(main, '审查结果 / 运行输出').grid(row=3, column=0, sticky='ew', pady=(theme.GAP, 2))
         self.output = OutputPane(main, self.font_mono)
-        self.output.grid(row=1, column=0, sticky='nsew', pady=(theme.GAP, 0))
+        self.output.grid(row=4, column=0, sticky='nsew')
 
         # ---- 输入行 ----
         chat = tk.Frame(main, bg=theme.BG)
-        chat.grid(row=2, column=0, sticky='ew', pady=(theme.GAP, 0))
+        chat.grid(row=5, column=0, sticky='ew', pady=(theme.GAP, 0))
         self.entry = tk.Entry(
             chat, bg=theme.PANEL, fg=theme.FG, insertbackground=theme.FG,
             relief='flat', font=self.font_ui, highlightthickness=1,
@@ -153,19 +158,12 @@ class Shell:
         )
         self.entry.pack(side='left', fill='x', expand=True, ipady=7)
         self.entry.bind('<Return>', lambda _e: self.submit())
-        FlatButton(chat, '发送', self.submit, accent=True,
+        PillButton(chat, '发送', self.submit, accent=True,
                    font=self.font_ui).pack(side='left', padx=(8, 0))
+        build_input_actions(chat, self)
         self.entry.focus_set()
 
     # ------------------------------------------------------------ 功能调度
-    @staticmethod
-    def _group_order(features: list) -> list[str]:
-        from .features.base import GROUPS
-
-        seen = [f.group for f in features]
-        ordered = [g for g in GROUPS if g in seen]
-        return ordered + [g for g in dict.fromkeys(seen) if g not in ordered]
-
     def _invoke(self, feature) -> None:
         if feature.panel_factory is not None:
             self.panel_host.toggle(feature)
@@ -191,6 +189,7 @@ class Shell:
         self.chat_repository = None
         if clear_output:
             self.output.clear()
+            self.chat.clear()
             self.append('── 新会话 ──\n', 'accent')
         self.set_status('就绪')
 
@@ -245,9 +244,9 @@ class Shell:
             self.repo_var.set(path)
             config.save_last_repo(path)
 
-    def run_cli(self, args: list, cwd: str, label: str) -> None:
+    def run_cli(self, args: list, cwd: str, label: str, sink=None) -> None:
         columns = self.output.columns()
-        if not self.runner.start(args, cwd, label, columns=columns):
+        if not self.runner.start(args, cwd, label, columns=columns, sink=sink):
             messagebox.showinfo('正在运行', '上一个任务还没结束，先点「取消任务」或等它跑完。',
                                 parent=self.root)
 
@@ -258,6 +257,7 @@ class Shell:
         self._toggle_running_buttons(True)
 
     def _on_done(self, code: int) -> None:
+        self.chat_section.finish(code)
         if code == 0:
             self.append('\n── 完成 ──\n', 'accent')
             self.set_status('就绪')
@@ -288,7 +288,6 @@ class Shell:
             for error in self.load_errors:
                 self.append(f'  · {error}\n', 'err')
             self.set_status(f'{len(self.load_errors)} 个功能模块加载失败')
-
 
 def main() -> None:
     from .features import load

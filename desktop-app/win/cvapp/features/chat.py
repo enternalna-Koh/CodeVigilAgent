@@ -30,11 +30,11 @@ def send(app, text: str) -> None:
         'chat', '--message', text, '--network', 'auto',
         '--session', app.chat_session, '--repository', repo,
     ]
-    # CLI 一次性模式只打印回答、不回显提问；补一行，恢复的对话里才看得到
-    # 「我问了什么」，否则刷新后只剩 Agent 的回答。
-    app.append('\n● 你\n' + text + '\n\n', 'user')
+    # CLI 一次性模式只打印回答、不回显提问；气泡区自己放用户消息，
+    # 回复先收进 buffer，等任务结束再落成 Agent 气泡。
+    buffer = app.chat_section.begin(text)
     label = '续写历史会话' if getattr(app, 'current_session', '') else '提问'
-    app.run_cli(args, cwd=repo or ROOT, label=label)
+    app.run_cli(args, cwd=repo or ROOT, label=label, sink=buffer.append)
 
 
 FEATURES = [

@@ -87,9 +87,12 @@ class WindowsChatTests(unittest.TestCase):
                 current_repo=lambda: str(repo), append=lambda *_args: None,
                 output=SimpleNamespace(clear=lambda: None), set_status=lambda *_args: None,
                 chat_session=None, chat_repository=None,
+                chat=SimpleNamespace(clear=lambda: None),
+                chat_section=SimpleNamespace(begin=lambda text: [],
+                                             cancel=lambda: None),
             )
 
-            def run_cli(args, cwd, label):
+            def run_cli(args, cwd, label, sink=None):
                 output = io.StringIO()
                 with patch.dict(os.environ, {'REVIEWAGENT_HOME': str(root / 'home')}), \
                         patch.object(ascend_cli, 'get_ai_client', return_value=model), \

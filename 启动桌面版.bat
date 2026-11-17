@@ -50,7 +50,7 @@ if not defined PY (
     echo     1. 重新安装 Python，安装时勾选 "tcl/tk and IDLE"
     echo     2. 如果你有多个 Python，把带 tkinter 的那个放到 PATH 前面
     echo     3. 命令行运行下面这条，把报错发我：
-    echo        python desktop-app\win\app.py
+    echo        python desktop_py\app.py
     echo.
     pause
     exit /b 1
@@ -64,7 +64,7 @@ for %%D in ("%PY%") do set "PYDIR=%%~dpD"
 set "PYW=%PYDIR%pythonw.exe"
 if not exist "%PYW%" set "PYW=%PY%"
 
-start "" "%PYW%" "%~dp0desktop-app\win\app.py"
+start "" "%PYW%" "%~dp0desktop_py\app.py"
 
 rem give the window a moment, then close this console
 ping -n 3 127.0.0.1 >nul 2>&1

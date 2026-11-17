@@ -12,6 +12,7 @@ import json
 import os
 import shlex
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -1261,6 +1262,31 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
     return 'handled'
 
 
+def _elapsed_ms(since_monotonic: float) -> int:
+    """本次提问的耗时（毫秒）。
+
+    桌面端会用 REVIEWAGENT_CLIENT_START 把它「点发送那一刻」的单调时钟值传进来
+    （Swift 侧是 ProcessInfo.systemUptime，和 perf_counter 同为开机起算的单调时钟，
+    同一台机器上跨进程可比），所以这样算出来的就是用户真实等待的秒数（含解释器启动），
+    界面上的计时和存进会话的数字才会一致。
+    取不到该变量、或数值明显不在同一个时钟域时，退回进程内计时（终端口径）。
+    """
+    local_ms = int(round((time.monotonic() - since_monotonic) * 1000))
+    raw = os.environ.get('REVIEWAGENT_CLIENT_START', '').strip()
+    if not raw:
+        return max(0, local_ms)
+    try:
+        client_start = float(raw)
+    except ValueError:
+        return max(0, local_ms)
+    delta = time.perf_counter() - client_start
+    # 客户端时钟只可能比进程内计时更长（多出解释器启动那一段）；
+    # 超出 30s 窗口说明两边不是同一个时钟基准，宁可退回进程内数字也不写错的耗时。
+    if local_ms <= delta * 1000 <= local_ms + 30000:
+        return int(round(delta * 1000))
+    return max(0, local_ms)
+
+
 def chat(args: argparse.Namespace) -> int:
     ensure_utf8_stdio()
     enable_windows_ansi()
@@ -1350,6 +1376,8 @@ def chat(args: argparse.Namespace) -> int:
         message = _prepare_message(message, repo_root, quiet=getattr(args, 'json', False))
         if not getattr(args, "json", False):
             begin_think('思考中')
+        # 进程内起点（终端口径）：单调时钟，系统时间被调整也不会算出负数
+        think_started = time.monotonic()
         turn = None
         if session_name:
             now = datetime.now().astimezone().isoformat(timespec='seconds')
@@ -1381,17 +1409,22 @@ def chat(args: argparse.Namespace) -> int:
                 end_think('回答就绪')
         reply = redact_secrets(reply, agent)
         _USAGE.record(message, reply)
+        elapsed_ms = _elapsed_ms(think_started)
+        finished_at = datetime.now().astimezone().isoformat(timespec='seconds')
         if turn is not None:
-            turn['updated_at'] = datetime.now().astimezone().isoformat(timespec='seconds')
+            turn['updated_at'] = finished_at
             if agent.last_ok:
                 turn['status'] = 'completed'
                 agent.desktop_messages.append({
                     'role': 'assistant', 'content': reply, 'status': 'completed',
-                    'updated_at': turn['updated_at'],
+                    'updated_at': finished_at, 'finished_at': finished_at,
+                    'elapsed_ms': elapsed_ms,
                 })
             else:
                 turn['status'] = 'failed'
                 turn['error'] = reply
+                turn['finished_at'] = finished_at
+                turn['elapsed_ms'] = elapsed_ms
         if session_name:
             try:
                 save_session(agent, session_name, update_latest=False, include_all_history=True)
@@ -1408,7 +1441,9 @@ def chat(args: argparse.Namespace) -> int:
                 reply = reply.replace(api_key, "[API Key 已隐藏]")
             print(json.dumps({"ok": bool(agent.last_ok),
                               "reply": reply if agent.last_ok else None,
-                              "error": None if agent.last_ok else reply}, ensure_ascii=False))
+                              "error": None if agent.last_ok else reply,
+                              "elapsed_ms": elapsed_ms,
+                              "finished_at": finished_at}, ensure_ascii=False))
             return 0 if agent.last_ok else 1
         _print_agent_reply(reply)
         return 0 if agent.last_ok else 1
