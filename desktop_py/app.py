@@ -333,19 +333,11 @@ class App(tk.Tk):
             self.search_entry.configure(fg=FAINT)
 
     def _build_top(self, parent):
-        # 标题行：薄荷绿主标题 + 灰色副标题 + 右侧状态（折叠按钮在历史栏里）
-        head = tk.Frame(parent, bg=BG)
-        head.pack(fill="x")
-        tk.Label(head, text="CodeVigil Agent", bg=BG, fg=MINT,
-                 font=ui_font(17, True), anchor="w").pack(side="left")
-        tk.Label(head, text="昇腾 AI Infra 代码审查与问题诊断", bg=BG, fg=FAINT,
-                 font=ui_font(9), anchor="w").pack(side="left", padx=(10, 0), pady=(6, 0))
-        tk.Label(head, text="已恢复对话", bg=BG, fg=FAINT,
-                 font=ui_font(9), anchor="e").pack(side="right", pady=(6, 0))
+        # 主标题行已移除：窗口标题由系统标题栏（self.title）体现，空间让给消息区。
 
         # 仓库行：仓库 + 只读路径 + 选择目录（在右侧）
         box = tk.Frame(parent, bg=BG)
-        box.pack(fill="x", pady=(6, 0))
+        box.pack(fill="x", pady=(0, 0))
         tk.Label(box, text="仓库", bg=BG, fg=SUB, font=ui_font(9)).pack(side="left")
         entry = tk.Entry(box, textvariable=self.repo_var, fg=INK, bg=PANEL,
                          readonlybackground=PANEL, relief="flat", font=ui_font(9),
