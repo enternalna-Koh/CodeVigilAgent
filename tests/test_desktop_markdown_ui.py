@@ -21,13 +21,22 @@ if tk is not None:
 
 
 class RenderTests(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         if tk is None:
-            self.skipTest("Python 未安装 tkinter")
+            raise unittest.SkipTest("Python 未安装 tkinter")
         try:
-            self.root = tk.Tk()
+            cls.root = tk.Tk()
         except tk.TclError as exc:
-            self.skipTest(f"无法打开图形界面：{exc}")
+            raise unittest.SkipTest(f"无法打开图形界面：{exc}")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.root.destroy()
+
+    def setUp(self):
+        # Aqua Tk 的进程级应用对象不能按每个用例反复销毁；复用同一根窗口，
+        # 每例仍创建全新控件并在结束时移除，保留真实事件及剪贴板断言。
         self.root.geometry("700x460+120+120")
         self.area = ScrollArea(self.root)
         self.area.pack(fill="both", expand=True)
@@ -35,8 +44,9 @@ class RenderTests(unittest.TestCase):
         self.root.update()
 
     def tearDown(self):
-        if hasattr(self, "root"):
-            self.root.destroy()
+        for child in self.root.winfo_children():
+            child.destroy()
+        self.root.update_idletasks()
 
     def block(self, content, **kwargs):
         block = MarkdownBlock(self.area.body, content, self.font, 500, **kwargs)
