@@ -71,7 +71,7 @@
 | `desktop_py/settings_dialog.py` | 当前桌面模型设置与配置保存 | 修改设置交互时 |
 | `scripts/gateway_key.py` | 新旧桌面共用的服务商/地址与密钥归属 | 修改密钥归属时 |
 | `scripts/patch_paths.py` | 补丁事务的固定目录句柄及安全文件操作 | 修改补丁文件访问时 |
-| `desktop_py/md_render.py` | 聊天消息的 Markdown 样式、气泡与文字复制 | 修改聊天消息呈现时 |
+| `desktop_py/md_render.py` | 聊天消息的 Markdown 样式、气泡与文字复制；用户气泡以普通 `place` 布局叠放文字，映射且目标宽度稳定后测量完整高度，避免 Canvas 内嵌窗口的独立尺寸协商 | 修改聊天消息呈现时 |
 | `desktop_py/ui_kit.py` | 共用颜色、字体和滚动容器 | 修改界面基础组件时 |
 | `desktop-app/win/cvapp/shell.py` | 窗口骨架：侧边栏 + 工作区 | 一般不动 |
 | `desktop-app/win/cvapp/features/` | **桌面版功能注册表** | 加桌面功能只动这里 |

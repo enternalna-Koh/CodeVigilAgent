@@ -327,7 +327,8 @@ class UserBubble(tk.Frame):
                             insertwidth=0)
         self.text.insert("1.0", text)
         self.text.configure(state="disabled")
-        self._window = self._canvas.create_window(12, 8, window=self.text, anchor="nw")
+        # Text 用普通几何布局叠在背景上，避免 Canvas window 的独立尺寸协商。
+        self.text.place(x=12, y=8, width=24, height=self._font.metrics("linespace"))
         self._menu = tk.Menu(self.text, tearoff=0)
         self._menu.add_command(label="复制选中", command=self.copy_selection)
         self._menu.add_command(label="全选", command=self._select_all)
@@ -351,7 +352,8 @@ class UserBubble(tk.Frame):
         text = self.text.get("1.0", "end-1c")
         longest = max((self._font.measure(line) for line in text.split("\n")), default=0)
         width = max(24, min(max_width - 24, longest + 3))
-        self._canvas.itemconfigure(self._window, width=width)
+        self._text_width = width
+        self.text.place_configure(width=width)
         self._canvas.configure(width=width + 24)
         self._schedule_fit()
 
@@ -363,13 +365,13 @@ class UserBubble(tk.Frame):
 
     def _fit(self):
         self._fit_job = None
-        if not self.text.winfo_ismapped() or self.text.winfo_width() <= 1:
+        if not self.text.winfo_ismapped() or self.text.winfo_width() != self._text_width:
             return
         self._fit_width = self.text.winfo_width()
         height = int(self.text.tk.call(self.text._w, "count", "-update", "-ypixels",
                                        "1.0", "end"))
         height = max(self._font.metrics("linespace"), height)
-        self._canvas.itemconfigure(self._window, height=height)
+        self.text.place_configure(height=height)
         width = int(self._canvas.winfo_reqwidth())
         bubble_height = max(34, height + 16)
         self._canvas.configure(height=bubble_height)

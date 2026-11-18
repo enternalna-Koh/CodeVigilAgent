@@ -1,6 +1,7 @@
 """回归：Windows 桌面聊天的 Markdown、可复制文字及重新排版。"""
 from pathlib import Path
 import importlib.util
+import subprocess
 import sys
 import unittest
 from unittest.mock import patch
@@ -161,8 +162,44 @@ class RenderTests(unittest.TestCase):
         self.assertGreater(self.area.canvas.yview()[0], before)
         self.assertEqual(block.text.yview(), (0.0, 1.0))
 
+    def test_user_bubble_ignores_transient_narrow_width(self):
+        original = "长消息 " * 800
+        bubble = UserBubble(self.area.body, original, self.font, 400)
+        bubble.pack(fill="x")
+        self.root.update()
+        height = bubble._canvas.winfo_height()
+        with patch.object(bubble._canvas, "configure", wraps=bubble._canvas.configure) as configure:
+            bubble.text.place_configure(width=2)
+            self.root.update()
+            self.assertEqual(bubble.text.winfo_width(), 2)
+            configure.assert_not_called()
+        self.assertEqual(bubble._canvas.winfo_height(), height)
+        bubble.set_max_width(280)
+        self.root.update()
+        self.assertEqual(bubble.text.get("1.0", "end-1c"), original)
+        self.assertEqual(bubble.text.yview(), (0.0, 1.0))
+        required = int(bubble.text.tk.call(bubble.text._w, "count", "-update", "-ypixels",
+                                          "1.0", "end"))
+        self.assertGreaterEqual(bubble.text.winfo_height(), required)
+
+    def test_destroy_cancels_pending_message_layout(self):
+        for message_type in (MarkdownBlock, UserBubble):
+            for mapped in (False, True):
+                with self.subTest(message_type=message_type.__name__, mapped=mapped):
+                    message = message_type(self.area.body, "长消息 " * 800, self.font, 400)
+                    if mapped:
+                        message.pack(fill="x")
+                        self.root.update()
+                    message._schedule_fit()
+                    job = message._fit_job
+                    self.assertIsNotNone(job)
+                    message.destroy()
+                    self.assertNotIn(job, self.root.tk.splitlist(self.root.tk.call("after", "info")))
+                    self.root.update()
+
     def test_wheel_over_user_bubble_moves_outer_scroll(self):
-        bubble = UserBubble(self.area.body, "长消息 " * 800, self.font, 400)
+        original = "长消息 " * 800
+        bubble = UserBubble(self.area.body, original, self.font, 400)
         bubble.pack(fill="x")
         self.root.update()
         self.area.canvas.yview_moveto(0.0)
@@ -173,6 +210,14 @@ class RenderTests(unittest.TestCase):
             self.root.update()
         self.assertGreater(self.area.canvas.yview()[0], before)
         self.assertEqual(bubble.text.yview(), (0.0, 1.0))
+        bubble.copy_all()
+        self.assertEqual(self.root.clipboard_get(), original)
+        self.area.canvas.yview_moveto(1.0)
+        self.root.update()
+        self.assertEqual(self.area.canvas.yview()[1], 1.0)
+        last_line = bubble.text.dlineinfo("end-1c")
+        self.assertIsNotNone(last_line)
+        self.assertLessEqual(last_line[1] + last_line[3], bubble.text.winfo_height())
 
     def test_report_text_is_verbatim(self):
         raw = "报告 **原样**\n下一行\n"
@@ -181,6 +226,16 @@ class RenderTests(unittest.TestCase):
         self.assertIn("codeblock", self.tag_at(block, "报告"))
 
     def test_synthetic_historical_conversation_redraw(self):
+        # App 自己是 Tk 根窗口；独立进程保留真实重绘，避免破坏 Aqua 的共享应用状态。
+        result = subprocess.run(
+            [sys.executable, "-c",
+             "import runpy, sys; namespace = runpy.run_path(sys.argv[1]); "
+             "namespace['RenderTests']()._assert_historical_redraw()",
+             str(Path(__file__).resolve())],
+            capture_output=True, text=True, timeout=90)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def _assert_historical_redraw(self):
         spec = importlib.util.spec_from_file_location("desktop_py_app", DESKTOP / "app.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
