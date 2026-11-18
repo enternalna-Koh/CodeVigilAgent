@@ -5,7 +5,7 @@ const { findPython } = require('./python-launcher');
 
 try {
   const python = findPython();
-  const result = spawnSync(python.command, [...python.args, '-m', 'unittest', 'discover', '-s', 'tests', '-q'], {
+  const result = spawnSync(python.command, [...python.args, '-X', 'faulthandler', '-m', 'unittest', 'discover', '-s', 'tests', '-v'], {
     cwd: path.join(__dirname, '..'),
     stdio: 'inherit',
     windowsHide: true,
