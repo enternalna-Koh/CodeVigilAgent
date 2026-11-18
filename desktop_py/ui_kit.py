@@ -13,7 +13,18 @@ import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import ttk
 
-ROOT = Path(__file__).resolve().parents[1]
+def _app_root() -> Path:
+    """项目根目录。
+
+    源码运行时 = 仓库根（desktop_py 的上一级）；打包成 exe 后 __file__ 指向
+    PyInstaller 的临时解包目录，要改取 exe 所在目录，否则默认仓库/配置会定位错。
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[1]
+
+
+ROOT = _app_root()
 IS_WIN = os.name == "nt"
 
 INK = "#E6E6E6"

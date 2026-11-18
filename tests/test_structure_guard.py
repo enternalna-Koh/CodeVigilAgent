@@ -35,6 +35,7 @@ BUDGETS = {
     'desktop-app/win/cvapp/lifecycle.py': 80,
     'desktop_py/app.py': 1000,
     'desktop_py/cli_runtime.py': 250,
+    'desktop_py/entry.py': 80,
     'desktop_py/session_controller.py': 400,
     'desktop_py/settings_dialog.py': 380,
     'scripts/gateway_key.py': 80,
@@ -47,6 +48,12 @@ FUNCTION_BUDGETS = {
 }
 
 FORBIDDEN_IMPORT = re.compile(r'(?m)^\s*(?:import|from)\s+ascend_cli\b')
+
+# 唯一允许 import ascend_cli 的桌面文件：打包入口本身。
+# 理由：打成单个 exe 后目标机器没有 Python，只能用「同一个 exe 加 --cli」
+# 在进程内跑 CLI；这是入口层的正向依赖，不是 GUI 能力文件的反向依赖。
+# 名单必须保持只有这一项，下面 LayeringTests 有断言钉住。
+LAYERING_ENTRY_ALLOWED = {'desktop_py/entry.py'}
 
 
 class FileSizeTests(unittest.TestCase):
@@ -92,10 +99,18 @@ class LayeringTests(unittest.TestCase):
         offenders = []
         for directory in ('desktop-app/win/cvapp', 'desktop_py'):
             for path in (ROOT / directory).rglob('*.py'):
+                relative = str(path.relative_to(ROOT)).replace('\\', '/')
+                if relative in LAYERING_ENTRY_ALLOWED:
+                    continue
                 text = path.read_text(encoding='utf-8', errors='replace')
                 if FORBIDDEN_IMPORT.search(text):
-                    offenders.append(str(path.relative_to(ROOT)))
+                    offenders.append(relative)
         self.assertEqual(offenders, [], f'桌面层不应依赖 CLI 入口: {offenders}')
+
+    def test_layering_exemption_stays_narrow(self):
+        self.assertEqual(LAYERING_ENTRY_ALLOWED, {'desktop_py/entry.py'})
+        self.assertTrue((ROOT / 'desktop_py' / 'entry.py').is_file(),
+                        '豁免对应的打包入口必须真实存在')
 
 
     def test_desktop_capabilities_do_not_import_window_entry(self):

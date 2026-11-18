@@ -66,6 +66,7 @@
 | `tests/test_structure_guard.py` | 结构守卫：行数预算、分层、注册表约定 | 调预算时 |
 | `desktop-app/win/app.py` | 桌面版入口，20 行 | 不动 |
 | `desktop_py/app.py` | 当前 Windows 桌面启动入口与布局；通过职责模块组合行为 | 修改窗口交互时 |
+| `desktop_py/entry.py` | 打包入口：默认启 GUI，带 `--cli` 时在同一进程内跑 CLI；是唯一允许 import `ascend_cli` 的桌面文件 | 修改打包产物时 |
 | `desktop_py/cli_runtime.py` | CLI 子进程、异步结果队列、取消与关闭回收 | 修改任务执行时 |
 | `desktop_py/session_controller.py` | 发送/审查编排、会话读取与代次保护 | 修改会话交互时 |
 | `desktop_py/settings_dialog.py` | 当前桌面模型设置与配置保存 | 修改设置交互时 |
@@ -188,7 +189,7 @@ Feature(id='history.panel', group='会话', label='历史会话',
 |------|------|
 | 关键文件行数预算 | `ascend_cli.py` 等超预算就红，必须拆模块或显式调预算 |
 | `handle_chat_slash` 函数预算 | 禁止继续往同一个函数堆命令，新命令走注册表 |
-| 分层方向 | `scripts/` 不许 import `ascend_cli`，桌面层不许依赖 CLI 入口 |
+| 分层方向 | `scripts/` 不许 import `ascend_cli`，桌面层不许依赖 CLI 入口；唯一豁免 `desktop_py/entry.py`（打包入口，名单由测试钉死不得扩张） |
 | 注册表约定 | `cli_commands/` 下每个模块必须声明 `COMMANDS` |
 | 根目录文件数 ≤20 | 防止文件重新堆回根目录 |
 

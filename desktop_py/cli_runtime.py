@@ -44,17 +44,31 @@ class CliRuntime:
         env = cli_env()
         if extra_env:
             env.update({str(k): str(v) for k, v in extra_env.items()})
-        argv = [str(ROOT / "ascend_cli.py")] + [str(a) for a in args]
-        launch = cli_prefix() + argv
+        frozen = getattr(sys, "frozen", False)
+        if frozen:
+            # 打包后：同一个 exe 用 --cli 参数跑 CLI 逻辑，不再依赖机器上的 Python。
+            argv = ["--cli"] + [str(a) for a in args]
+            launch = [sys.executable] + argv
+        else:
+            argv = [str(ROOT / "ascend_cli.py")] + [str(a) for a in args]
+            launch = cli_prefix() + argv
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if IS_WIN else 0
         task = getattr(self._worker_context, "task", None)
         with self._process_lock:
             if self._closing:
                 return -1, "", "[窗口已关闭]"
-        proc = process_tree.popen(launch, cwd=str(cwd or ROOT), env=env,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                text=True, encoding="utf-8", errors="replace",
-                                creationflags=flags)
+        try:
+            proc = process_tree.popen(launch, cwd=str(cwd or ROOT), env=env,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, encoding="utf-8", errors="replace",
+                                    creationflags=flags)
+        except FileNotFoundError:
+            if frozen:
+                raise
+            proc = process_tree.popen([sys.executable] + argv, cwd=str(cwd or ROOT), env=env,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, encoding="utf-8", errors="replace",
+                                    creationflags=flags)
         with self._process_lock:
             self._processes.add(proc)
             if track:
