@@ -76,7 +76,7 @@ class ProcessTreeTests(unittest.TestCase):
             self.assertEqual(len(calls), count)
 
     def test_posix_wait_releases_group_before_reaping(self):
-        from scripts._posix_process_group import protect_reaping
+        from scripts import _posix_process_group as posix
         events = []
         proc = SimpleNamespace(pid=123, args=["test"], returncode=None,
                                _tree_lock=threading.RLock(), _tree_released=False)
@@ -86,14 +86,37 @@ class ProcessTreeTests(unittest.TestCase):
             return 0
         proc._wait = reap
         proc._internal_poll = lambda *a, **kw: reap()
-        with patch.object(os, "waitid", return_value=object(), create=True), \
+        with patch.object(posix, "ENABLED", True), \
+             patch.object(os, "waitid", return_value=object(), create=True), \
              patch.object(os, "P_PID", 1, create=True), \
              patch.object(os, "WEXITED", 4, create=True), \
              patch.object(os, "WNOWAIT", 16, create=True), \
              patch.object(os, "WNOHANG", 1, create=True):
-            protect_reaping(proc, lambda _: events.append("release"))
+            posix.protect_reaping(proc, lambda _: events.append("release"))
             self.assertEqual(proc._wait(timeout=1), 0)
         self.assertEqual(events, ["release", "reap"])
+
+    def test_posix_unsupported_waitid_falls_back_to_plain_wait(self):
+        from scripts import _posix_process_group as posix
+        events = []
+        proc = SimpleNamespace(pid=123, args=["test"], returncode=None,
+                               _tree_lock=threading.RLock(), _tree_released=False)
+        def reap(timeout=0):
+            events.append(("reap", timeout))
+            proc.returncode = 0
+            return 0
+        proc._wait = reap
+        proc._internal_poll = lambda *a, **kw: reap()
+        with patch.object(posix, "ENABLED", True), \
+             patch.object(os, "waitid", side_effect=PermissionError(1, "not permitted"), create=True), \
+             patch.object(os, "P_PID", 1, create=True), \
+             patch.object(os, "WEXITED", 4, create=True), \
+             patch.object(os, "WNOWAIT", 16, create=True), \
+             patch.object(os, "WNOHANG", 1, create=True):
+            posix.protect_reaping(proc, lambda _: events.append("release"))
+            # macOS 等平台不支持 WNOWAIT：必须退回普通等待，不能抛错中断运行器。
+            self.assertEqual(proc._wait(timeout=2), 0)
+        self.assertEqual(events, [("reap", 2)])
 
     def test_terminate_reaps_descendant_and_is_idempotent(self):
         proc = process_tree.popen(self.command(), stdout=subprocess.PIPE, text=True)
