@@ -75,7 +75,10 @@ class MarkdownBlock(tk.Frame):
         self.text.bind("<Button-4>", self._scroll_parent, add="+")
         self.text.bind("<Button-5>", self._scroll_parent, add="+")
         self.text.bind("<Button-3>", self._popup)
-        self.text.bind("<Control-a>", self._select_all)
+        for modifier in ("Control", "Command"):
+            self.text.bind(f"<{modifier}-a>", self._select_all)
+            self.text.bind(f"<{modifier}-c>", self._copy_event)
+        self.text.bind("<<Copy>>", self._copy_event)
         self._menu = tk.Menu(self.text, tearoff=0)
         self._menu.add_command(label="复制选中", command=self.copy_selection)
         self._menu.add_command(label="全选", command=self._select_all)
@@ -293,6 +296,10 @@ class MarkdownBlock(tk.Frame):
         self.clipboard_clear()
         self.clipboard_append(self._source)
 
+    def _copy_event(self, _event=None):
+        self.copy_selection()
+        return "break"
+
     def _select_all(self, _event=None):
         self.text.tag_add("sel", "1.0", "end-1c")
         return "break"
@@ -326,7 +333,10 @@ class UserBubble(tk.Frame):
         self._menu.add_command(label="全选", command=self._select_all)
         self._menu.add_command(label="复制全部", command=self.copy_all)
         self.text.bind("<Button-3>", self._popup)
-        self.text.bind("<Control-a>", self._select_all)
+        for modifier in ("Control", "Command"):
+            self.text.bind(f"<{modifier}-a>", self._select_all)
+            self.text.bind(f"<{modifier}-c>", self._copy_event)
+        self.text.bind("<<Copy>>", self._copy_event)
         self.text.bind("<MouseWheel>", self._scroll_parent, add="+")
         self.text.bind("<Button-4>", self._scroll_parent, add="+")
         self.text.bind("<Button-5>", self._scroll_parent, add="+")
@@ -399,6 +409,10 @@ class UserBubble(tk.Frame):
     def copy_all(self):
         self.clipboard_clear()
         self.clipboard_append(self.text.get("1.0", "end-1c"))
+
+    def _copy_event(self, _event=None):
+        self.copy_selection()
+        return "break"
 
     def _select_all(self, _event=None):
         self.text.tag_add("sel", "1.0", "end-1c")

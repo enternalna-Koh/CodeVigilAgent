@@ -11,7 +11,7 @@ from ui_kit import IS_WIN, ROOT
 
 
 def cli_prefix():
-    return ["py", "-3"] if IS_WIN else ["python3"]
+    return [sys.executable or ("python" if IS_WIN else "python3")]
 
 
 def cli_env():
@@ -56,16 +56,10 @@ class CliRuntime:
         with self._process_lock:
             if self._closing:
                 return -1, "", "[窗口已关闭]"
-        try:
-            proc = subprocess.Popen(launch, cwd=str(cwd or ROOT), env=env,
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    text=True, encoding="utf-8", errors="replace",
-                                    creationflags=flags)
-        except FileNotFoundError:
-            proc = subprocess.Popen([sys.executable] + argv, cwd=str(cwd or ROOT), env=env,
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    text=True, encoding="utf-8", errors="replace",
-                                    creationflags=flags)
+        proc = subprocess.Popen(launch, cwd=str(cwd or ROOT), env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, encoding="utf-8", errors="replace",
+                                creationflags=flags)
         with self._process_lock:
             self._processes.add(proc)
             if track:

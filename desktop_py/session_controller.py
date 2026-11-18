@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import time
 import uuid
@@ -31,7 +32,20 @@ def err_line(err, limit=120):
     return lines[-1][:limit] if lines else ""
 
 
+def canonical_repo(path):
+    return str(Path(path.strip() or ROOT).resolve())
+
+
 class SessionController:
+    _session_repository = None
+
+    def _repository_matches(self, repo):
+        if (self.session_name and (self._session_repository is None
+                or os.path.normcase(self._session_repository) != os.path.normcase(repo))):
+            self.set_status("仓库已改变，请先开新对话或恢复原仓库；输入已保留")
+            return False
+        return True
+
     def _context_blocked(self):
         if self._running:
             self.set_status("任务运行中，先取消或等它结束再切换上下文")
@@ -63,7 +77,9 @@ class SessionController:
         if self._pending_session:
             self.set_status("正在读取会话，请稍后再审查")
             return
-        repo = str(Path(self.repo_var.get().strip() or ROOT).resolve())
+        repo = canonical_repo(self.repo_var.get())
+        if not self._repository_matches(repo):
+            return
         epoch = self._conversation_epoch
         args = ["review"] + (["--offline"] if offline else [])
         label = "离线审查" if offline else "审查当前改动"
@@ -94,6 +110,9 @@ class SessionController:
         if self._pending_session:
             self.set_status("正在读取会话，请稍后发送；输入已保留")
             return
+        repo = canonical_repo(self.repo_var.get())
+        if not self._repository_matches(repo):
+            return
         self.input.delete("1.0", "end")
         self.cancel_flag = False
         client_start = time.perf_counter()
@@ -102,7 +121,7 @@ class SessionController:
         if not self.session_name:
             self.session_name = "desktop-win-" + uuid.uuid4().hex
         session = self.session_name
-        repo = str(Path(self.repo_var.get().strip() or ROOT).resolve())
+        self._session_repository = repo
         epoch = self._advance_conversation()
         # 发送立即废弃旧缓存，取消/失败也不能恢复旧的未追加历史。
         self._forget_session(session)
@@ -156,6 +175,7 @@ class SessionController:
             return
         self._advance_conversation()
         self.session_name = None
+        self._session_repository = None
         self.clear_transcript()
         self._set_session_header("新对话", f"仓库：{self.repo_var.get()}")
         self.input.delete("1.0", "end")
@@ -199,6 +219,7 @@ class SessionController:
         self._forget_session(name)
         if self.session_name == name:
             self.session_name = None
+            self._session_repository = None
             self.clear_transcript()
             self._set_session_header("新对话", f"仓库：{self.repo_var.get()}")
         self._sessions_cache = [s for s in self._sessions_cache if s.get("name") != name]
@@ -236,6 +257,7 @@ class SessionController:
             return
         self._pending_session = name
         self.session_name = None
+        self._session_repository = None
         self.clear_transcript()
         self.render_sessions(self._sessions_cache)
         self.set_status(f"正在打开会话：{name}")
@@ -268,6 +290,7 @@ class SessionController:
         messages = session.get("messages") or []
         self.session_name = name
         repository = session.get("repository")
+        self._session_repository = canonical_repo(repository or self.repo_var.get())
         if repository:
             self.repo_var.set(repository)
         self._set_session_header(session.get("title") or name,

@@ -227,7 +227,11 @@ def _stage_bytes(target: AnchoredFile, data: bytes, mode: Optional[int]) -> Anch
 
 
 def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = False) -> Dict:
-    """Validate the whole patch, then replace files with recoverable originals."""
+    """整批验证后替换并保留可恢复原件。
+
+    写入和回滚前复核内容及身份；目录句柄防止祖先替换重定向，但复核与
+    replace/unlink 之间不是跨平台原子 CAS，不能排除该窗口中的并发保存。
+    """
     root = root or work_root()
     result = {'root': str(root), 'ok': False, 'applied': 0, 'total': len(fix.files),
               'dry_run': dry_run, 'results': []}
@@ -245,7 +249,7 @@ def apply_fix(fix: ProposedFix, root: Optional[Path] = None, dry_run: bool = Fal
 def _apply_anchored(fix, paths, dry_run, result):
     root = paths.root
     result['root'] = str(root)
-    plans, seen, metadata = [], set(), {}
+    plans, seen, identities, metadata = [], set(), set(), {}
     try:
         metadata[root] = _git_metadata_paths(root)
         for edit in fix.files:
@@ -275,6 +279,9 @@ def _apply_anchored(fix, paths, dry_run, result):
                     after = edit.replace.encode('utf-8')
                 else:
                     before, mode = anchored.snapshot()
+                    if anchored.identity in identities:
+                        raise ValueError('同一文件身份不能包含多条补丁')
+                    identities.add(anchored.identity)
                     if os.name == 'nt' and not mode & stat.S_IWRITE:
                         raise ValueError('目标文件为只读，拒绝应用补丁')
                     text = before.decode('utf-8')
@@ -285,6 +292,7 @@ def _apply_anchored(fix, paths, dry_run, result):
                         raise ValueError('search 必须非空且唯一匹配')
                     after = text.replace(search, replacement, 1).encode('utf-8')
                 plans.append({'target': anchored, 'before': before, 'after': after,
+                              'identity': anchored.identity,
                               'mode': mode, 'row': row, 'action': edit.action})
             except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
                 row.update(status='rejected', error=str(exc))
@@ -306,13 +314,16 @@ def _apply_anchored(fix, paths, dry_run, result):
             target = plan['target']
             plan['new'] = _stage_bytes(target, plan['after'], plan['mode'])
             staged.append(plan['new'])
+            plan['new'].snapshot()
+            plan['written_identity'] = plan['new'].identity
             if plan['before'] is not None:
                 plan['backup'] = _stage_bytes(target, plan['before'], plan['mode'])
                 staged.append(plan['backup'])
         for plan in plans:
             target = plan['target']
             if ((plan['before'] is None and target.exists()) or
-                    (plan['before'] is not None and target.read_bytes() != plan['before'])):
+                    (plan['before'] is not None and
+                     (target.read_bytes() != plan['before'] or target.identity != plan['identity']))):
                 raise ValueError(f'验证后文件已变化，拒绝覆盖: {plan["row"]["path"]}')
             target.replace_from(plan['new'])
             written.append(plan)
@@ -322,12 +333,16 @@ def _apply_anchored(fix, paths, dry_run, result):
         result['error'] = f'写入失败或已中断，已尝试恢复原文件: {exc}'
         for plan in reversed(written):
             try:
+                target = plan['target']
+                if (target.read_bytes() != plan['after'] or
+                        target.identity != plan['written_identity']):
+                    raise ValueError('回滚冲突：文件内容或身份已变化，保留用户保存')
                 if plan['before'] is None:
-                    plan['target'].unlink()
+                    target.unlink()
                 else:
                     plan['target'].replace_from(plan['backup'])
                 plan['row']['status'] = 'rolled_back'
-            except OSError as rollback_exc:
+            except (OSError, ValueError) as rollback_exc:
                 plan['row'].update(status='rollback_failed', error=str(rollback_exc))
                 result.setdefault('rollback_errors', []).append(plan['row']['path'])
                 if plan.get('backup'):

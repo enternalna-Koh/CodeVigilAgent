@@ -126,6 +126,7 @@ class HistoryPanel(tk.Frame):
         self._placeholder = True
         self._generation = 0
         self._open_generation = 0
+        self._open_token = None
         self._closed = False
         self._pending = 0
         self._pump = None
@@ -252,11 +253,17 @@ class HistoryPanel(tk.Frame):
         self._open_generation += 1
         generation = self._open_generation
         session_generation = self.app._session_generation
+        token = self._open_token = object()
+        self.app._pending_history = token
         self.selected = name
         self._paint()
         self.app.set_status('正在恢复历史会话…')
 
         def done(session, error):
+            if getattr(self.app, '_pending_history', None) is not token:
+                return
+            self.app._pending_history = None
+            self._open_token = None
             if (self._closed or generation != self._open_generation
                     or session_generation != self.app._session_generation
                     or self.app.runner.busy):
@@ -315,6 +322,7 @@ class HistoryPanel(tk.Frame):
     # ------------------------------------------------------------ 操作
     def reset_selection(self) -> None:
         """取消选中（切到新会话时用）。"""
+        self._cancel_open()
         self._open_generation += 1
         self.selected = ''
         self._paint()
@@ -350,7 +358,14 @@ class HistoryPanel(tk.Frame):
         self.reset_selection()
         self.refresh()
 
+    def _cancel_open(self) -> None:
+        if (self._open_token is not None
+                and getattr(self.app, '_pending_history', None) is self._open_token):
+            self.app._pending_history = None
+        self._open_token = None
+
     def close(self) -> None:
+        self._cancel_open()
         self._closed = True
         self._generation += 1
         self._open_generation += 1

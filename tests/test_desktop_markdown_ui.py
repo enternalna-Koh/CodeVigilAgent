@@ -88,15 +88,20 @@ class RenderTests(unittest.TestCase):
 
     def test_keyboard_selection_copy_and_readonly(self):
         block = self.block("**加粗的文字**")
-        block.text.focus_force()
+        bubble = UserBubble(self.area.body, "用户原文", self.font, 420)
+        bubble.pack(fill="x")
         self.root.update()
-        block.text.event_generate("<Control-KeyPress-a>")
-        block.text.event_generate("<Control-KeyPress-c>")
-        self.root.update()
-        self.assertEqual(self.root.clipboard_get(), "加粗的文字")
-        block.text.event_generate("<KeyPress-X>")
-        self.root.update()
-        self.assertEqual(block.text.get("1.0", "end-1c"), "加粗的文字")
+        modifier = "Command" if self.root.tk.call("tk", "windowingsystem") == "aqua" else "Control"
+        for obj, expected in ((block, "加粗的文字"), (bubble, "用户原文")):
+            obj.text.focus_force()
+            self.root.update()
+            obj.text.event_generate(f"<{modifier}-KeyPress-a>")
+            obj.text.event_generate(f"<{modifier}-KeyPress-c>")
+            self.root.update()
+            self.assertEqual(self.root.clipboard_get(), expected)
+            obj.text.event_generate("<KeyPress-X>")
+            self.root.update()
+            self.assertEqual(obj.text.get("1.0", "end-1c"), expected)
 
     def test_clipboard_selected_and_all_for_both_message_types(self):
         block = self.block("**回复文字**")

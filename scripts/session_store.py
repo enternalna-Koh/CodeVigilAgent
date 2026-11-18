@@ -100,9 +100,11 @@ def serialize_agent(agent, *, include_all_history: bool = False) -> Dict[str, An
         'network': getattr(agent, 'network', 'auto'),
         'last_turn': getattr(agent, 'last_turn', None),
         'last_user_text': getattr(agent, 'last_user_text', None),
-        'last_user_source': getattr(getattr(agent, 'last_user_text', None), 'source_text', None),
+        'last_user_source': getattr(getattr(agent, 'last_user_text', None), 'source_text',
+                                    getattr(agent, 'last_user_text', None)),
         'last_reply': getattr(agent, 'last_reply', None),
         'history': history if include_all_history else history[-16:],
+        'planner_history': list(getattr(agent, 'planner_history', []) or [])[-4:],
         'contexts': list(getattr(agent, 'contexts', []) or []),
         'pending_fix': pending,
         'skill_names': [sk['name'] for sk in getattr(agent, 'active_skills', [])],
@@ -140,11 +142,21 @@ def apply_to_agent(agent, data: Dict[str, Any]) -> None:
         agent.network = network
     agent.last_turn = data.get('last_turn')
     agent.last_user_text = data.get('last_user_text')
-    if isinstance(agent.last_user_text, str) and isinstance(data.get('last_user_source'), str):
+    if isinstance(agent.last_user_text, str):
         from scripts.conversation_agent import UserMessage
-        agent.last_user_text = UserMessage(agent.last_user_text, data['last_user_source'])
+        # 旧数据可能混入附件；无法证明来源时仍给回答模型，但不授权工具规划。
+        source = data.get('last_user_source')
+        agent.last_user_text = UserMessage(agent.last_user_text, source if isinstance(source, str) else '')
     agent.last_reply = data.get('last_reply')
     agent.history = list(data.get('history') or [])
+    # 独立来源记录缺失时不从混合 history / desktop_messages 猜测用户原文。
+    planner_history = data.get('planner_history', [])
+    if not isinstance(planner_history, list) or any(
+            not isinstance(row, dict) or row.get('role') != 'user' or
+            not isinstance(row.get('content'), str) for row in planner_history):
+        raise ValueError('会话 planner_history 格式无效')
+    agent.planner_history = [{'role': 'user', 'content': row['content'][:8000]}
+                             for row in planner_history[-4:]]
     agent.contexts = list(data.get('contexts') or [])
     agent.desktop_messages = list(data.get('desktop_messages') or [])
     agent.desktop_title = data.get('desktop_title')

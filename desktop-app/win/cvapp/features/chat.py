@@ -17,6 +17,12 @@ def send(app, text: str) -> None:
     text = (text or '').strip()
     if not text:
         return
+    if getattr(app, '_pending_history', None) is not None:
+        # Shell.submit 已取走输入；恢复期间拒绝提交，并把原文放回输入框。
+        if not app.entry.get():
+            app.entry.insert(0, text)
+        app.set_status('正在恢复历史会话，请稍后发送；输入已保留')
+        return
     if app.runner.busy:
         app.append('\n上一个任务还没结束，请等待或取消后再发送。\n', 'err')
         return

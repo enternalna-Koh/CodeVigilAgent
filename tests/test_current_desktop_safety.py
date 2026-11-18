@@ -331,7 +331,7 @@ class HiddenDesktopTests(unittest.TestCase):
         with patch.object(cli_runtime.subprocess, "Popen", side_effect=launch):
             status, out, err = self.app.run_cli("review", cwd=self.tmp.name)
         self.assertEqual(status, 0)
-        self.assertEqual(Path(out.strip()), Path(self.tmp.name))
+        self.assertEqual(Path(out.strip()).resolve(), Path(self.tmp.name).resolve())
         code = "import threading; threading.Event().wait(30)"
         with patch.object(cli_runtime.subprocess, "Popen", side_effect=launch):
             status, out, err = self.app.run_cli("review", timeout=0.1)

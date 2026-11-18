@@ -10,6 +10,7 @@ class ShellLifecycle:
             self.append('\n任务运行中，请先取消或等任务结束后再开始新对话。\n', 'err')
             return False
         self._session_generation += 1
+        self._pending_history = None
         self.current_session = ''
         self.session_title = ''
         self.chat_session = None
@@ -29,6 +30,7 @@ class ShellLifecycle:
             return
         self._closing = True
         self._session_generation += 1
+        self._pending_history = None
         for panel in self.panels.values():
             close = getattr(panel, 'close', None)
             if callable(close):

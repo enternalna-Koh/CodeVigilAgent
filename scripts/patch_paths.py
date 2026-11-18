@@ -22,6 +22,9 @@ if os.name == 'nt':
     _kernel.GetFileInformationByHandleEx.argtypes = [wintypes.HANDLE, ctypes.c_int,
                                                     wintypes.LPVOID, wintypes.DWORD]
     _kernel.GetFileInformationByHandleEx.restype = wintypes.BOOL
+    _kernel.GetFinalPathNameByHandleW.argtypes = [wintypes.HANDLE, wintypes.LPWSTR,
+                                                wintypes.DWORD, wintypes.DWORD]
+    _kernel.GetFinalPathNameByHandleW.restype = wintypes.DWORD
 
     class _AttributeTag(ctypes.Structure):
         _fields_ = [('attributes', wintypes.DWORD), ('tag', wintypes.DWORD)]
@@ -85,6 +88,14 @@ if os.name == 'nt':
                 raise ctypes.WinError(ctypes.get_last_error())
             if info.attributes & 0x400 or bool(info.attributes & 0x10) != directory:
                 raise ValueError(f'拒绝链接、重解析点或非预期文件类型: {path}')
+            # 查询已打开对象的规范名，拒绝 8.3 父目录/叶子别名而非字符串 resolve。
+            buffer = ctypes.create_unicode_buffer(32768)
+            length = _kernel.GetFinalPathNameByHandleW(handle, buffer, len(buffer), 0)
+            if not length or length >= len(buffer):
+                raise ValueError(f'无法确认句柄规范名: {path}')
+            canonical = Path(buffer.value)
+            if path.parent != path and canonical.name.casefold() != path.name.casefold():
+                raise ValueError(f'拒绝非规范文件别名（可能为 Git 元数据）: {path}')
             return handle
         except BaseException:
             _kernel.CloseHandle(handle)
@@ -180,6 +191,7 @@ class PatchPaths:
 class AnchoredFile:
     def __init__(self, paths, path):
         self.paths, self.path = paths, path
+        self.identity = None
 
     def __str__(self):
         return str(self.path)
@@ -204,6 +216,10 @@ class AnchoredFile:
             info = os.fstat(stream.fileno())
             if not stat.S_ISREG(info.st_mode):
                 raise ValueError(f'拒绝非普通文件: {self.path}')
+            # 硬链接可能指向任意位置的 Git 元数据，无法仅由当前名称判定安全。
+            if info.st_nlink != 1 or not info.st_ino:
+                raise ValueError(f'拒绝硬链接或无法确认文件身份: {self.path}')
+            self.identity = (info.st_dev, info.st_ino)
             return stream.read(), stat.S_IMODE(info.st_mode)
 
     def exists(self):

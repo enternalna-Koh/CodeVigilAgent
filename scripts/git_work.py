@@ -23,7 +23,7 @@ def run_git(args: List[str], cwd: Optional[str] = None, timeout: int = 120) -> D
         return {'ok': False, 'code': 127, 'out': '未找到 git，请先安装并加入 PATH。', 'cmd': ['git', *args]}
     try:
         proc = subprocess.run(
-            [git, *args],
+            [git, '-c', 'core.fsmonitor=false', *args],
             cwd=str(_root(cwd)),
             text=True,
             encoding='utf-8',
