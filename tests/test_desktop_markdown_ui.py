@@ -269,5 +269,25 @@ class RenderTests(unittest.TestCase):
                 app.destroy()
 
 
+def load_tests(loader, standard_tests, pattern):
+    if __name__ == "__main__":
+        return standard_tests
+    # Aqua Tk 具有进程级原生应用状态；与其他测试的根窗口生命周期隔离。
+    # 每个原始用例在子进程中原样执行，崩溃、超时与断言失败均使父用例失败。
+    suite = unittest.TestSuite()
+    for method in loader.getTestCaseNames(RenderTests):
+        def run_case(method=method):
+            result = subprocess.run(
+                [sys.executable, str(Path(__file__).resolve()),
+                 f"RenderTests.{method}", "-q"],
+                capture_output=True, text=True, timeout=120)
+            if result.returncode:
+                raise AssertionError(result.stdout + result.stderr)
+            if "skipped=" in result.stderr:
+                raise unittest.SkipTest(result.stderr.strip())
+        suite.addTest(unittest.FunctionTestCase(run_case, description=f"RenderTests.{method}"))
+    return suite
+
+
 if __name__ == "__main__":
     unittest.main()
