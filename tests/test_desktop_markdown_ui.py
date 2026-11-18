@@ -240,6 +240,19 @@ class RenderTests(unittest.TestCase):
             capture_output=True, text=True, timeout=90)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_historical_redraw_rejects_callback_exception(self):
+        result = subprocess.run(
+            [sys.executable, "-c",
+             "import runpy, sys; n=runpy.run_path(sys.argv[1]); "
+             "from unittest.mock import patch; "
+             "fault=lambda self: (_ for _ in ()).throw(RuntimeError('CALLBACK_SENTINEL')); "
+             "p=patch.object(n['MarkdownBlock'], '_fit', fault); p.start(); "
+             "n['RenderTests']()._assert_historical_redraw()",
+             str(Path(__file__).resolve())],
+            capture_output=True, text=True, timeout=90)
+        self.assertIn("CALLBACK_SENTINEL", result.stderr)
+        self.assertNotEqual(result.returncode, 0, "回调异常不得判为成功")
+
     def _assert_historical_redraw(self):
         spec = importlib.util.spec_from_file_location("desktop_py_app", DESKTOP / "app.py")
         module = importlib.util.module_from_spec(spec)
@@ -247,8 +260,10 @@ class RenderTests(unittest.TestCase):
         App = module.App
         with patch.object(App, "load_sessions"), patch.object(App, "show_welcome"):
             app = App()
-            app.update()
+            callback_errors = []
+            app.report_callback_exception = lambda *error: callback_errors.append(error)
             try:
+                app.update()
                 session = {"name": "md-test", "title": "测试", "messages": [
                     {"role": "user", "content": "问题 **原文**"},
                     {"role": "assistant", "content": "回答 **重点**", "elapsed_ms": 1200},
@@ -267,6 +282,7 @@ class RenderTests(unittest.TestCase):
                 for job in app.tk.splitlist(app.tk.call("after", "info")):
                     app.after_cancel(job)
                 app.destroy()
+            self.assertEqual(callback_errors, [], f"Tk回调异常：{callback_errors!r}")
 
 
 def load_tests(loader, standard_tests, pattern):

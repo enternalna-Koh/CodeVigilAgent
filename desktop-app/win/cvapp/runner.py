@@ -14,6 +14,10 @@ import tkinter as tk
 
 from . import ROOT
 
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+from scripts import process_tree
+
 
 class Runner:
     def __init__(self, root: tk.Misc, on_line, on_start, on_done):
@@ -57,7 +61,7 @@ class Runner:
         creation = 0x08000000 if os.name == 'nt' else 0   # CREATE_NO_WINDOW
 
         try:
-            self._proc = subprocess.Popen(
+            self._proc = process_tree.popen(
                 args, cwd=cwd, env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding='utf-8', errors='replace',
@@ -69,19 +73,19 @@ class Runner:
 
         self._serial += 1
         self._active = self._serial
+        proc = self._proc
+        threading.Thread(target=process_tree.watch_exit, args=(proc,), daemon=True).start()
         self._thread = threading.Thread(
-            target=self._reader, args=(self._proc, self._active, sink), daemon=True)
+            target=self._reader, args=(proc, self._active, sink), daemon=True)
         self._thread.start()
         self._on_start(label)
         return True
 
     def cancel(self) -> None:
         proc = self._proc
-        if self.busy and proc is not None and proc.poll() is None:
-            try:
-                proc.terminate()
-            except ProcessLookupError:
-                return
+        if self.busy and proc is not None:
+            threading.Thread(target=process_tree.terminate, args=(proc,),
+                             kwargs={'wait': True}, daemon=True).start()
             self._on_line('\n[已请求取消]\n')
 
     def close(self) -> None:
@@ -96,16 +100,7 @@ class Runner:
             self._after = None
         proc = self._proc
         if proc is not None:
-            if proc.poll() is None:
-                try:
-                    proc.terminate()
-                except ProcessLookupError:
-                    pass
-            try:
-                proc.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=1)
+            process_tree.terminate(proc, wait=True)
         if self._thread is not None:
             self._thread.join(timeout=1)
         self._active = None
@@ -129,7 +124,11 @@ class Runner:
         except Exception as exc:                       # noqa: BLE001
             self._queue.put((task_id, sink, 'out', f'\n读取输出出错：{exc}\n'))
         finally:
-            self._queue.put((task_id, sink, 'done', proc.wait()))
+            try:
+                code = proc.wait()
+            finally:
+                process_tree.release(proc)
+            self._queue.put((task_id, sink, 'done', code))
 
     def _tick(self) -> None:
         """Tk 线程消费事件；完成回调返回前仍占有本轮任务。"""

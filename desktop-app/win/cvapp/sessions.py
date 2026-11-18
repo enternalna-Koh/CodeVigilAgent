@@ -17,9 +17,28 @@ import json
 import os
 import subprocess
 import sys
+from contextlib import contextmanager
+import threading
 from datetime import datetime, timezone
 
 from . import ROOT
+
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+from scripts.process_tree import ProcessOwner
+
+_query_context = threading.local()
+
+
+@contextmanager
+def query_scope(owner):
+    previous = getattr(_query_context, 'owner', None)
+    _query_context.owner = owner
+    try:
+        yield
+    finally:
+        _query_context.owner = previous
+
 
 CLI_PATH = os.path.join(ROOT, 'ascend_cli.py')
 TIMEOUT = 60          # 秒；读本地文件正常远小于这个值
@@ -38,10 +57,10 @@ def _run(args: list[str]) -> dict:
     """跑一次 sessions 子命令并返回解析后的 JSON。"""
     cmd = [sys.executable, CLI_PATH] + args
     try:
-        proc = subprocess.run(
-            cmd, cwd=ROOT, capture_output=True, text=True,
-            encoding='utf-8', errors='replace', timeout=TIMEOUT,
-        )
+        owner = getattr(_query_context, 'owner', None)
+        run = owner.run if owner is not None else subprocess.run
+        proc = run(cmd, cwd=ROOT, capture_output=True, text=True,
+                   encoding='utf-8', errors='replace', timeout=TIMEOUT)
     except subprocess.TimeoutExpired:
         raise SessionError(f'读取会话历史超时（{TIMEOUT} 秒没有响应）')
     except OSError as exc:

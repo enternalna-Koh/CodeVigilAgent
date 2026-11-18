@@ -9,6 +9,10 @@ import threading
 
 from ui_kit import IS_WIN, ROOT
 
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from scripts import process_tree
+
 
 def cli_prefix():
     return [sys.executable or ("python" if IS_WIN else "python3")]
@@ -23,16 +27,7 @@ def cli_env():
 
 
 def terminate_process(proc, *, wait=False):
-    try:
-        proc.terminate()
-    except OSError:
-        pass
-    if wait:
-        try:
-            proc.wait(timeout=1)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=2)
+    process_tree.terminate(proc, wait=wait)
 
 
 class CliRuntime:
@@ -56,7 +51,7 @@ class CliRuntime:
         with self._process_lock:
             if self._closing:
                 return -1, "", "[窗口已关闭]"
-        proc = subprocess.Popen(launch, cwd=str(cwd or ROOT), env=env,
+        proc = process_tree.popen(launch, cwd=str(cwd or ROOT), env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, encoding="utf-8", errors="replace",
                                 creationflags=flags)
@@ -66,6 +61,8 @@ class CliRuntime:
                 self.proc = proc
             abort = self._closing or (track and (self.cancel_flag or
                     (task is not None and task != self._active_task)))
+        if type(getattr(proc, "pid", None)) is int:
+            threading.Thread(target=process_tree.watch_exit, args=(proc,), daemon=True).start()
         try:
             if abort:
                 terminate_process(proc, wait=True)
@@ -76,18 +73,21 @@ class CliRuntime:
                 try:
                     out, err = proc.communicate(timeout=1)
                 except subprocess.TimeoutExpired:
-                    proc.kill()
+                    process_tree.kill(proc)
                     out, err = proc.communicate(timeout=2)
                 err = (err or "") + f"\n[超时 {timeout}s]"
             return proc.returncode, out or "", err or ""
         finally:
-            with self._process_lock:
-                self._processes.discard(proc)
-                if track and self.proc is proc:
-                    self.proc = None
-            for stream in (proc.stdout, proc.stderr):
-                if stream is not None:
-                    stream.close()
+            try:
+                process_tree.release(proc)
+            finally:
+                with self._process_lock:
+                    self._processes.discard(proc)
+                    if track and self.proc is proc:
+                        self.proc = None
+                for stream in (proc.stdout, proc.stderr):
+                    if stream is not None:
+                        stream.close()
 
     def run_async(self, work, done, label, cancellable=False):
         if self._closing:

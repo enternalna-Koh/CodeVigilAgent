@@ -132,6 +132,7 @@ class HistoryPanel(tk.Frame):
         self._pump = None
         self._search_job = None
         self._queue: queue.Queue = queue.Queue()
+        self._queries = sessions.ProcessOwner()
 
         self._build()
         self.refresh()
@@ -367,6 +368,9 @@ class HistoryPanel(tk.Frame):
     def close(self) -> None:
         self._cancel_open()
         self._closed = True
+        owner = self.__dict__.get('_queries')
+        if owner is not None:
+            owner.close()
         self._generation += 1
         self._open_generation += 1
         self._cancel_search_job()
@@ -413,14 +417,19 @@ class HistoryPanel(tk.Frame):
         if self._closed:
             return
         self._pending += 1
+        owner = self.__dict__.get('_queries')
+        if owner is None:
+            owner = self._queries = sessions.ProcessOwner()
 
         def runner():
             try:
-                result = work()
+                with sessions.query_scope(owner):
+                    result = work()
                 payload = (done, result, '')
             except Exception as exc:                  # noqa: BLE001
                 payload = (done, None, str(exc))
-            self._queue.put(payload)
+            if not self._closed:
+                self._queue.put(payload)
 
         threading.Thread(target=runner, daemon=True).start()
         self._schedule()

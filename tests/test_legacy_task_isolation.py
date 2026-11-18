@@ -123,6 +123,7 @@ def make_panel(app):
     panel.selected = 'old'
     panel._generation = 0
     panel._open_generation = 0
+    panel._open_token = None
     panel._closed = False
     panel._pending = 0
     panel._pump = None
