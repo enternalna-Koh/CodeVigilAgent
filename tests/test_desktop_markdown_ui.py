@@ -1,5 +1,6 @@
 """回归：Windows 桌面聊天的 Markdown、可复制文字及重新排版。"""
 from pathlib import Path
+import faulthandler
 import importlib.util
 import subprocess
 import sys
@@ -26,6 +27,7 @@ class RenderTests(unittest.TestCase):
     def setUpClass(cls):
         if tk is None:
             raise unittest.SkipTest("Python 未安装 tkinter")
+        faulthandler.enable()
         try:
             cls.root = tk.Tk()
         except tk.TclError as exc:
@@ -38,6 +40,8 @@ class RenderTests(unittest.TestCase):
     def setUp(self):
         # Aqua Tk 的进程级应用对象不能按每个用例反复销毁；复用同一根窗口，
         # 每例仍创建全新控件并在结束时移除，保留真实事件及剪贴板断言。
+        self._callback_errors = []
+        self.root.report_callback_exception = lambda *error: self._callback_errors.append(error)
         self.root.geometry("700x460+120+120")
         self.area = ScrollArea(self.root)
         self.area.pack(fill="both", expand=True)
@@ -48,6 +52,7 @@ class RenderTests(unittest.TestCase):
         for child in self.root.winfo_children():
             child.destroy()
         self.root.update_idletasks()
+        self.assertEqual(self._callback_errors, [], "Tk 回调异常")
 
     def block(self, content, **kwargs):
         block = MarkdownBlock(self.area.body, content, self.font, 500, **kwargs)
@@ -229,7 +234,7 @@ class RenderTests(unittest.TestCase):
         # App 自己是 Tk 根窗口；独立进程保留真实重绘，避免破坏 Aqua 的共享应用状态。
         result = subprocess.run(
             [sys.executable, "-c",
-             "import runpy, sys; namespace = runpy.run_path(sys.argv[1]); "
+             "import faulthandler, runpy, sys; faulthandler.enable(); namespace = runpy.run_path(sys.argv[1]); "
              "namespace['RenderTests']()._assert_historical_redraw()",
              str(Path(__file__).resolve())],
             capture_output=True, text=True, timeout=90)
