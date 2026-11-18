@@ -31,6 +31,7 @@ from settings_dialog import (CUSTOM_FALLBACK_TITLE, SettingsDialog,  # noqa: F40
 
 
 from cli_runtime import CliRuntime, cli_env, cli_prefix
+from edit_menu import attach_edit_menu
 from session_controller import SessionController, err_line, parse_json
 
 
@@ -313,6 +314,8 @@ class App(CliRuntime, SessionController, tk.Tk):
                              padx=8, pady=6)
         self.input.pack(side="left", fill="both", expand=True)
         self.input.bind("<Return>", self._on_enter)
+        # 右键菜单：剪切 / 复制 / 粘贴 / 全选。引用存在实例上，避免菜单被回收。
+        self.input_menu = attach_edit_menu(self.input)
 
         buttons = tk.Frame(box, bg=BG)
         buttons.pack(side="left", padx=(8, 0))

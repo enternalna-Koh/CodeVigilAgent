@@ -36,6 +36,7 @@ BUDGETS = {
     'desktop_py/app.py': 1000,
     'desktop_py/cli_runtime.py': 250,
     'desktop_py/entry.py': 80,
+    'desktop_py/edit_menu.py': 150,
     'desktop_py/session_controller.py': 400,
     'desktop_py/settings_dialog.py': 380,
     'scripts/gateway_key.py': 80,
