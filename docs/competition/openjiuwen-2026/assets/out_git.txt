@@ -1,0 +1,27 @@
+ReviewAgent 1.8.0  ·  D:\Agent-ReviewAgent
+> /git status
+
+
+╭─ Agent ─────────────────────────────────────────────────╮
+│ ◆ Git 状态
+│   ════════════════════════════════════════════
+│ 
+│ • 目录: D:\Agent-ReviewAgent
+│ • 分支: main
+│ 
+│ ┌──────────────────────────────────────────────────────────────────────┐
+│ │ ## main...origin/main
+│ │ ?? "bin/openJiuwen Creative Competition Submission Template-EN.pptx"
+│ │ ?? bin/openJiuwen智能体创意大赛模板.pptx
+│ │ ?? bin/openJiuwen智能体创新大赛·参赛FAQ文档.pdf
+│ │ ?? data/raw/gitcode_opengauss_collect_error.json
+│ │ ?? docs/competition/
+│ │ ?? "openJiuwen Creative Competition Submission Template-EN.pptx"
+│ │ ?? openJiuwen智能体创意大赛模板.pptx
+│ │ ?? openJiuwen智能体创新大赛·参赛FAQ文档.pdf
+│ └──────────────────────────────────────────────────────────────────────┘
+│ 
+│ 变更文件数: 8
+│ 
+│ 下一步: /git diff 查看 · /commit "说明" 提交 · /push 推送 · /pr 开 PR
+╰──────────────────────────────────────────────────────────╯

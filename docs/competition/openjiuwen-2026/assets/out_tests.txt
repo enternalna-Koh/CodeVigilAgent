@@ -1,0 +1,11 @@
+﻿python.exe : ----------------------------------------------------------------------
+所在位置 行:4 字符: 8
++ $out = & python -m unittest discover -s tests -q 2>&1 | Out-String
++        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (---------------...---------------:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Ran 209 tests in 29.080s
+
+OK
+

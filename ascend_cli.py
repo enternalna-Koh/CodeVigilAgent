@@ -1179,6 +1179,8 @@ def handle_chat_slash(text: str, agent: ConversationAgent, reload_client=None, c
         print(brand('审核 / 质检怎么用'))
         print(ok('0) AI自动调换（默认）'))
         print(mute('   闲聊↔正式审查自动切换；生产力: /fix→/commit→/push→/pr 或 /ship'))
+        print(mute('   自然语言生产力: 「拉取 PR 并修改…」→ 出计划 → 回复「确认」整段执行'))
+        print(mute('   （取消计划回复「取消」；不 force / amend）'))
         print(mute('   钉住: /chat /work · 恢复调换: /mode auto'))
         print(ok('0b) 多对话'))
         print(mute('   /new [名字]  新开对话（旧的可 /back 返回）'))
@@ -1350,7 +1352,11 @@ def chat(args: argparse.Namespace) -> int:
         agent.network = args.network
     repository = getattr(args, 'repository', None)
     if repository is not None:
-        agent.desktop_repository = str(Path(repository).expanduser().resolve()) if repository else ''
+        repo_path = str(Path(repository).expanduser().resolve()) if repository else ''
+        agent.desktop_repository = repo_path
+        # 用户选的目录同时作为 work_root / clone 父目录（不再默认落到 C:\Users\...）
+        if repo_path and Path(repo_path).is_dir():
+            agent.work_root = Path(repo_path)
     elif not hasattr(agent, 'desktop_repository'):
         agent.desktop_repository = str(agent.work_root)
 

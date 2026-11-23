@@ -1,0 +1,15 @@
+ReviewAgent 1.8.0  ·  D:\Agent-ReviewAgent
+> /skill list
+
+可用 Skills:
+  • api-consistency-community  [project.cursor] — >-
+  • cann-ascendc-op-dev  [project.cursor] — >-
+  • common-issues-patterns  [project.cursor] — torch-npu 社区常见问题、审核模式、典型错误与解决方案汇总
+  • deployment-practices  [project.cursor] — CANN 推理服务部署实践 - 服务化、容器化、监控、生产最佳实践
+  • inference-optimization  [project.cursor] — CANN 推理性能优化知识包 - Profiling 分析、算子融合、图优化、内存管理
+  • model-migration  [project.cursor] — CANN 模型迁移知识包 - CUDA/PyTorch/ONNX → 昇腾 NPU 适配指南
+  • opengauss-community  [project.cursor] — >-
+  • vllm-ascend-practices  [project.cursor] — vLLM-Ascend 大模型推理部署实践 - 常见问题、性能优化、多卡部署
+  • cann-spmv-ascendc  [user.cursor] — >-
+  • viral-short-script  [user.cursor] — >-
+官方可装: torch-npu-pr-review, torch-npu-api-target-analyse, torch-npu-doc-writer, torch-npu-remote-runner, torch-npu-server-runner

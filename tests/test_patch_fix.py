@@ -27,6 +27,21 @@ class PatchFixUnitTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_fix_json(raw)
 
+    def test_parse_repairs_fence_and_trailing_comma(self):
+        raw = '''```json
+{
+  "scenario": "general",
+  "summary": "ok",
+  "files": [
+    {"path": "a.py", "action": "create", "search": "", "replace": "x"}
+  ],
+}
+```'''
+        fix = parse_fix_json(raw)
+        self.assertEqual(fix.summary, 'ok')
+        self.assertEqual(len(fix.files), 1)
+        self.assertEqual(fix.files[0].path, 'a.py')
+
     def test_apply_replace_unique_only(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

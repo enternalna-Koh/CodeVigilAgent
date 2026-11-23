@@ -35,6 +35,13 @@ class RoutingModeTests(unittest.TestCase):
         # Real follow-up only while work lane is active
         self.assertTrue(is_infra_query('那怎么改？', has_context=True, session_lane='work'))
         self.assertFalse(is_infra_query('那怎么改？', has_context=True, session_lane='chat'))
+        # Sticky PR quality / optimize follow-ups must stay in work lane
+        self.assertTrue(is_infra_query('这个PR质量如何？', has_context=True, session_lane='work'))
+        self.assertTrue(is_infra_query('帮我优化PR', has_context=True, session_lane='work'))
+        self.assertEqual(
+            resolve_turn_mode('auto', '这个PR质量如何？', True, False, session_lane='work'),
+            'infra',
+        )
 
     def test_resolve_turn_mode_auto_switches(self):
         self.assertEqual(resolve_turn_mode('auto', '好的', True, False, session_lane='work'), 'light')

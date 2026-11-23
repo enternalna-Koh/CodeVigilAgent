@@ -109,6 +109,7 @@ def serialize_agent(agent, *, include_all_history: bool = False) -> Dict[str, An
         'pending_fix': pending,
         'skill_names': [sk['name'] for sk in getattr(agent, 'active_skills', [])],
         'work_root': str(getattr(agent, 'work_root', '')),
+        'last_pr_url': getattr(agent, 'last_pr_url', None),
         'desktop_messages': messages,
         'desktop_title': getattr(agent, 'desktop_title', None),
         'desktop_repository': getattr(agent, 'desktop_repository', None),
@@ -161,6 +162,7 @@ def apply_to_agent(agent, data: Dict[str, Any]) -> None:
     agent.desktop_messages = list(data.get('desktop_messages') or [])
     agent.desktop_title = data.get('desktop_title')
     agent.desktop_repository = data.get('desktop_repository') or str(root)
+    agent.last_pr_url = data.get('last_pr_url')
     # Pending fixes contain structured FileEdit objects — do not revive from JSON.
     agent.pending_fix = None
     agent.active_skills = []

@@ -1,0 +1,7 @@
+ReviewAgent 1.8.0  ·  D:\Agent-ReviewAgent
+> /mcp
+
+MCP servers（内置 ascend-doc = 昇腾文档）
+  • ascend-doc [on] npx -y ascend-doc-mcp@latest
+      昇腾官方只读文档 MCP
+用法: /mcp tools <server> · /mcp call <server> <tool> [json] · /mcp reload

@@ -1,0 +1,12 @@
+ReviewAgent 1.8.0  ·  D:\Agent-ReviewAgent
+> /status
+
+会话状态
+  模式: AI自动调换 · 当前车道: 日常
+  会话名: (未命名)
+  上轮: - · 联网: auto
+  上下文: 0 · 对话轮次: 0
+  待应用补丁: 无 · 最近工具: 0
+  模型: openai/MiniMax-M1
+  工作区: D:\Agent-ReviewAgent
+  /new · /back · /skill · /mcp · /ship · /help

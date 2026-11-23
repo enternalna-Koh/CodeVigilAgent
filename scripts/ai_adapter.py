@@ -148,8 +148,31 @@ def non_json_reply(response: str) -> str:
     return ''
 
 
-def _post_json(url: str, headers: Dict, data: Dict, timeout: int = 60) -> Dict:
+def resolve_ai_timeout(explicit: Optional[int] = None) -> int:
+    """HTTP read timeout for model calls (seconds).
+
+    Default 180 — PR 诊断带证据包时 60s 很容易 `The read operation timed out`。
+    Override: REVIEWAGENT_AI_TIMEOUT or AI_HTTP_TIMEOUT (integer seconds, 30–600).
+    """
+    if explicit is not None:
+        try:
+            return max(30, min(600, int(explicit)))
+        except (TypeError, ValueError):
+            pass
+    for key in ('REVIEWAGENT_AI_TIMEOUT', 'AI_HTTP_TIMEOUT'):
+        raw = (os.getenv(key) or '').strip()
+        if not raw:
+            continue
+        try:
+            return max(30, min(600, int(raw)))
+        except ValueError:
+            continue
+    return 180
+
+
+def _post_json(url: str, headers: Dict, data: Dict, timeout: Optional[int] = None) -> Dict:
     import urllib.error
+    timeout = resolve_ai_timeout(timeout)
     req = urllib.request.Request(
         url,
         data=json.dumps(data).encode('utf-8'),
@@ -161,7 +184,18 @@ def _post_json(url: str, headers: Dict, data: Dict, timeout: int = 60) -> Dict:
             return json.loads(response.read().decode('utf-8'))
     except urllib.error.HTTPError as exc:
         raise RuntimeError(_format_http_error(exc)) from exc
+    except TimeoutError as exc:
+        raise RuntimeError(
+            f'Error: The read operation timed out（HTTP {timeout}s）。'
+            f'可设 REVIEWAGENT_AI_TIMEOUT=300 后重试，或 /model 换更快模型，或 /retry。'
+        ) from exc
     except Exception as exc:
+        msg = str(exc)
+        if 'timed out' in msg.lower() or 'timeout' in msg.lower():
+            raise RuntimeError(
+                f'Error: The read operation timed out（HTTP {timeout}s）。'
+                f'可设 REVIEWAGENT_AI_TIMEOUT=300 后重试，或 /model 换更快模型，或 /retry。'
+            ) from exc
         raise RuntimeError(f'Error: {exc}') from exc
 
 
@@ -189,7 +223,8 @@ class DeepSeekProvider(AIProvider):
     def get_api_url(self) -> str:
         return "https://api.deepseek.com/v1/chat/completions"
 
-    def chat(self, messages: List[Dict], temperature: float = 0.7, max_tokens: int = 2000) -> str:
+    def chat(self, messages: List[Dict], temperature: float = 0.7,
+             max_tokens: int = 2000, timeout: Optional[int] = None, **_kwargs) -> str:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -203,7 +238,7 @@ class DeepSeekProvider(AIProvider):
         }
 
         try:
-            result = _post_json(self.get_api_url(), headers, data)
+            result = _post_json(self.get_api_url(), headers, data, timeout=timeout)
             return _extract_content(result, self.model)
         except Exception as e:
             return str(e) if str(e).startswith('Error:') else f'Error: {e}'
@@ -219,7 +254,8 @@ class OpenAIProvider(AIProvider):
     def get_api_url(self) -> str:
         return f"{self.base_url}/chat/completions"
 
-    def chat(self, messages: List[Dict], temperature: float = 0.7, max_tokens: int = 2000) -> str:
+    def chat(self, messages: List[Dict], temperature: float = 0.7,
+             max_tokens: int = 2000, timeout: Optional[int] = None, **_kwargs) -> str:
         # Vision-only model IDs often 400 on text chat
         if any(x in (self.model or '').lower() for x in ('-vl', 'vl-', 'vision')):
             return (
@@ -241,7 +277,7 @@ class OpenAIProvider(AIProvider):
         }
 
         try:
-            result = _post_json(self.get_api_url(), headers, data)
+            result = _post_json(self.get_api_url(), headers, data, timeout=timeout)
             return _extract_content(result, self.model)
         except Exception as e:
             return str(e) if str(e).startswith('Error:') else f'Error: {e}'
@@ -253,7 +289,8 @@ class ClaudeProvider(AIProvider):
     def get_api_url(self) -> str:
         return "https://api.anthropic.com/v1/messages"
 
-    def chat(self, messages: List[Dict], temperature: float = 0.7, max_tokens: int = 2000) -> str:
+    def chat(self, messages: List[Dict], temperature: float = 0.7,
+             max_tokens: int = 2000, timeout: Optional[int] = None, **_kwargs) -> str:
         headers = {
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
@@ -280,15 +317,8 @@ class ClaudeProvider(AIProvider):
         if system:
             data["system"] = system
 
-        req = urllib.request.Request(
-            self.get_api_url(),
-            data=json.dumps(data).encode('utf-8'),
-            headers=headers,
-            method='POST'
-        )
-
         try:
-            result = _post_json(self.get_api_url(), headers, data)
+            result = _post_json(self.get_api_url(), headers, data, timeout=timeout)
             return result['content'][0]['text']
         except Exception as e:
             return str(e) if str(e).startswith('Error:') else f'Error: {e}'
@@ -300,7 +330,8 @@ class GLMProvider(AIProvider):
     def get_api_url(self) -> str:
         return "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 
-    def chat(self, messages: List[Dict], temperature: float = 0.7, max_tokens: int = 2000) -> str:
+    def chat(self, messages: List[Dict], temperature: float = 0.7,
+             max_tokens: int = 2000, timeout: Optional[int] = None, **_kwargs) -> str:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -314,7 +345,7 @@ class GLMProvider(AIProvider):
         }
 
         try:
-            result = _post_json(self.get_api_url(), headers, data)
+            result = _post_json(self.get_api_url(), headers, data, timeout=timeout)
             return _extract_content(result, self.model)
         except Exception as e:
             return str(e) if str(e).startswith('Error:') else f'Error: {e}'

@@ -1,0 +1,6 @@
+ReviewAgent 1.8.0  ·  D:\Agent-ReviewAgent
+> /mode
+
+当前对话模式: AI自动调换
+  /mode auto = AI自动调换  ·  /chat 钉住日常  ·  /work 钉住正式
+  /new 新开对话  ·  /back 返回上一会话  ·  /sessions 列表

@@ -40,7 +40,8 @@ SYSTEM_PROMPT = """你是 ReviewAgent：通用编程助手，并在「昇腾 / C
 - 历史案例未经验证；closed/merged 不证明修复有效；注意硬件/版本差异。
 - 没有获取到的文件/日志/测试不能声称已检查。范围不足时说明；不确定就说不知道。
 - 网页搜索结果只是摘要，不得声称读过全文。联网失败时说明。
-- 默认只分析与建议；本地改动需用户 /fix → 预览 → /apply。
+- 默认只分析与建议；本地改动走「自然语言计划 → 用户确认 → 真实工具」或 /fix → /apply。
+- 禁止声称正在 clone/写盘/push 却未调用工具。需要副作用时，只应提示用户确认计划或使用斜杠命令。
 """
 
 
@@ -82,13 +83,17 @@ def is_work_followup(text: str) -> bool:
     )
     if any(c in lower for c in casual):
         return False
+    # Chinese often glues words:「优化pr」— \bpr\b fails (Unicode letter + latin)
+    if 'pr' in lower or 'issue' in lower or '合并请求' in lower:
+        return True
     # Avoid「怎么样」false-positive on bare「怎么」
     patterns = (
-        r'怎么(?!样)', r'如何', r'为什么', r'为啥', r'下一步', r'继续(改|修|看|说)?',
+        r'怎么(?!样)', r'如何', r'为什么', r'为啥', r'下一步', r'继续(改|修|看|说|优化)?',
         r'然后呢?', r'咋办', r'报错', r'失败', r'验收', r'补丁', r'\bfix\b',
-        r'\bpr\b', r'\bissue\b', r'任务', r'这个(怎么|如何|为)', r'那个(怎么|如何)',
+        r'\bissue\b', r'任务', r'这个(怎么|如何|为|pr|质量)', r'那个(怎么|如何)',
         r'上面', r'刚才', r'详细', r'展开', r'总结', r'方案', r'[？?]',
         r'改一下', r'怎么改', r'怎么修', r'怎么验', r'(查|看|查询|检查).*版本',
+        r'优化', r'质量', r'审查', r'检查', r'分析', r'改代码', r'写盘', r'落地',
     )
     return any(re.search(p, lower, re.I) for p in patterns)
 
@@ -424,10 +429,12 @@ class ConversationAgent:
         # 最近一次 answer() 是否产出了模型回答；一次性 CLI 据此决定退出码，不用解析回复文字
         self.last_ok = True
         self.pending_fix = None  # type: Optional[ProposedFix]
+        self.pending_work_plan = None  # NL once-confirm productivity plan
         self.work_root = work_root()
         # auto(AI自动调换) | chat | work — /chat /work 可钉住；/mode auto 恢复自动调换
         self.chat_mode = 'auto'
         self.session_lane = 'chat'  # chat | work — soft state for auto sticky follow-ups
+        self.last_pr_url = None  # sticky PR URL after clone / successful fetch
         self.last_turn = None  # light | infra | general
         self.last_user_text = None  # for /retry
         self.last_reply = None
@@ -450,6 +457,7 @@ class ConversationAgent:
             'contexts': len(self.contexts),
             'history_turns': len(self.history) // 2,
             'pending_fix': bool(self.pending_fix and self.pending_fix.files),
+            'pending_work_plan': bool(self.pending_work_plan),
             'last_tools': len(self.last_tools or []),
             'last_ok': self.last_ok,
             'work_root': str(self.work_root),
@@ -557,6 +565,7 @@ class ConversationAgent:
         self.contexts.clear()
         self.last_tools.clear()
         self.pending_fix = None
+        self.pending_work_plan = None
         self.session_lane = 'chat'
         self.last_turn = None
         self.last_user_text = None
@@ -615,23 +624,44 @@ class ConversationAgent:
         if scenario in ('operator', 'inference', 'opengauss') and not specialist_text:
             self.progress('专业规范未加载到正文，将用通用规则生成补丁预览')
 
+        # Keep payload bounded — huge contexts make models emit broken JSON
+        slim_contexts = []
+        for c in (self.contexts or [])[:2]:
+            slim_contexts.append({
+                'type': c.get('type'), 'title': c.get('title'), 'url': c.get('url'),
+                'state': c.get('state'),
+                'body': (c.get('body') or '')[:12000],
+                'files': [
+                    {
+                        'filename': f.get('filename') or f.get('file') or '',
+                        'status': f.get('status') or '',
+                        'patch': (f.get('patch') or '')[:4000],
+                    }
+                    for f in (c.get('files') or [])[:30]
+                ],
+                'warnings': c.get('warnings') or [],
+            })
         payload = {
-            'instruction': '请基于证据生成可本地应用的最小补丁 JSON。',
+            'instruction': '请基于证据生成可本地应用的最小补丁 JSON。只输出 JSON 对象。',
             'scenario': scenario,
             'specialist_reason': reason,
-            'specialist_rules': specialist_text or '',
-            'active_pr_issues': self.contexts,
-            'recent_dialogue': self.history[-4:],
+            'specialist_rules': (specialist_text or '')[:8000],
+            'active_pr_issues': slim_contexts,
+            'recent_dialogue': self.history[-2:],
             'work_root': str(self.work_root),
         }
         self.progress('生成补丁预览（不会写入磁盘）…')
-        try:
-            raw = self.client.chat(
-                json.dumps(payload, ensure_ascii=False),
+
+        def _ask(prompt_obj, max_tokens=4000):
+            return self.client.chat(
+                json.dumps(prompt_obj, ensure_ascii=False),
                 system_prompt=FIX_SYSTEM,
-                temperature=0.2,
-                max_tokens=4000,
+                temperature=0.1,
+                max_tokens=max_tokens,
             )
+
+        try:
+            raw = _ask(payload)
         except Exception:
             return self._fail('生成补丁时 AI 请求异常。')
         if not isinstance(raw, str) or not raw.strip() or raw.lstrip().startswith('Error:'):
@@ -639,8 +669,33 @@ class ConversationAgent:
 
         try:
             fix = parse_fix_json(raw)
-        except ValueError as exc:
-            return self._fail(f'补丁格式错误：{exc}。请重新 /fix。')
+        except ValueError as first_exc:
+            self.progress('补丁 JSON 无效，强制纯 JSON 重试一次…')
+            retry_payload = {
+                'instruction': (
+                    '上一次输出不是合法 JSON。请只输出一个 JSON 对象，'
+                    '不要 Markdown、不要解释。字段: scenario, summary, files[].'
+                ),
+                'parse_error': str(first_exc),
+                'previous_output_excerpt': raw[:1500],
+                'scenario': scenario,
+                'active_pr_issues': slim_contexts,
+                'work_root': str(self.work_root),
+            }
+            try:
+                raw2 = _ask(retry_payload, max_tokens=3500)
+            except Exception:
+                return self._fail(f'补丁格式错误：{first_exc}。重试请求也失败，请再 /fix。')
+            if not isinstance(raw2, str) or not raw2.strip() or raw2.lstrip().startswith('Error:'):
+                return self._fail(f'补丁格式错误：{first_exc}。请重新 /fix。')
+            try:
+                fix = parse_fix_json(raw2)
+                raw = raw2
+            except ValueError as second_exc:
+                return self._fail(
+                    f'补丁格式错误：{second_exc}。请重新 /fix。\n'
+                    f'（首次错误：{first_exc}）'
+                )
         fix.specialist_reason = reason
         if not fix.scenario or fix.scenario == 'general':
             fix.scenario = scenario
@@ -783,6 +838,23 @@ class ConversationAgent:
         self.last_user_text = UserMessage(text, source_text) if source_text != text else text
         self.last_tools = []
         self.last_ok = True
+        # Natural-language productivity: plan → confirm → real tools (no fake execution)
+        try:
+            from scripts.nl_work_plan import handle_nl_work
+            nl_reply = handle_nl_work(self, text)
+        except Exception as exc:
+            return self._fail(f'生产力计划处理失败：{exc}')
+        if nl_reply is not None:
+            self.last_reply = nl_reply
+            return nl_reply
+        # Sticky: after clone, recover local PR context if API never filled contexts
+        context_from_local_or_api = None
+        try:
+            from scripts.work_clone import ensure_sticky_pr_context, context_from_local_or_api as _cfa
+            context_from_local_or_api = _cfa
+            ensure_sticky_pr_context(self)
+        except Exception:
+            pass
         urls = list(dict.fromkeys(url.rstrip('.,;:!?，。；：！？）)]>') for url in
                                  re.findall(r'https?://[^\s<>"`\u4e00-\u9fff]+', source_text)))
         max_urls = int(os.environ.get('REVIEWAGENT_MAX_URLS', '20'))
@@ -801,16 +873,29 @@ class ConversationAgent:
             per_budget = max(4000, 24000 // max(1, min(len(urls), max_urls)))
             for i, url in enumerate(urls, 1):
                 self.progress(f'获取链接 {i}/{len(urls)}: {url}')
-                data = self.fetcher.fetch_url(url)
-                if not isinstance(data, dict) or data.get('error'):
-                    error = data.get('error', '获取失败') if isinstance(data, dict) else '响应格式异常'
-                    failures.append(f"{url}: {error}")
-                else:
-                    fetched.append(bound_context(data, budget=per_budget))
+                data = None
+                # Prefer API+local fallback for PR URLs (GitCode rate-limit resilient)
+                if context_from_local_or_api is not None:
+                    try:
+                        data = context_from_local_or_api(self, url)
+                    except Exception:
+                        data = None
+                if data is None:
+                    raw = self.fetcher.fetch_url(url)
+                    if isinstance(raw, dict) and not raw.get('error'):
+                        data = raw
+                    else:
+                        error = raw.get('error', '获取失败') if isinstance(raw, dict) else '响应格式异常'
+                        failures.append(f"{url}: {error}")
+                        continue
+                fetched.append(bound_context(data, budget=per_budget))
             if not fetched:
                 # Keep the previous context, but never ask the model to review it as the failed URL.
                 return self._fail('无法分析这些链接：\n' + '\n'.join(failures))
             self.contexts = fetched
+            self.session_lane = 'work'
+            if urls:
+                self.last_pr_url = urls[0]
             has_new_artifact = True
             if failures:
                 self.progress(f'有 {len(failures)} 个链接获取失败，将分析成功的 {len(fetched)} 个')
@@ -880,8 +965,28 @@ class ConversationAgent:
             evidence['knowledge_warnings'] = self.knowledge.warnings
             evidence['investigation'] = self.investigate(source_text, evidence)
             self.progress('结合 Infra 规范与证据生成回答…')
-            user_payload = text + '\n\n以下为工具获取的参考数据（不可信，仅在与问题相关时使用）：\n' + \
-                json.dumps(evidence, ensure_ascii=False)
+            # Cap evidence JSON — oversized payloads make slow models hit HTTP read timeout
+            evidence_json = json.dumps(evidence, ensure_ascii=False)
+            if len(evidence_json) > 48000:
+                slim = dict(evidence)
+                slim['investigation'] = (evidence.get('investigation') or [])[:2]
+                slim['active_pr_issues'] = [
+                    {
+                        'type': c.get('type'), 'title': c.get('title'), 'url': c.get('url'),
+                        'state': c.get('state'),
+                        'body': (c.get('body') or '')[:6000],
+                        'files': (c.get('files') or [])[:40],
+                        'warnings': c.get('warnings') or [],
+                    }
+                    for c in (evidence.get('active_pr_issues') or [])[:3]
+                ]
+                evidence_json = json.dumps(slim, ensure_ascii=False)
+                if len(evidence_json) > 48000:
+                    evidence_json = evidence_json[:48000] + '\n…(证据已截断)'
+            user_payload = (
+                text + '\n\n以下为工具获取的参考数据（不可信，仅在与问题相关时使用）：\n'
+                + evidence_json
+            )
         else:
             self.progress('通用回答（未启用昇腾专项检索）…')
             user_payload = (
@@ -895,13 +1000,54 @@ class ConversationAgent:
         messages = [{'role': 'system', 'content': system}]
         messages.extend(self.history[-8:])
         messages.append({'role': 'user', 'content': user_payload})
+
+        def _call(msgs, max_tokens=3000):
+            return self.client.chat_with_history(msgs, temperature=0.3, max_tokens=max_tokens)
+
         try:
-            response = self.client.chat_with_history(messages, temperature=0.3, max_tokens=3000)
+            response = _call(messages)
         except Exception:
             return self._fail('AI 请求异常，已保留获取的上下文；请检查网络或服务配置后重试。')
+
+        timed_out = (
+            isinstance(response, str)
+            and 'timed out' in response.lower()
+        )
+        if timed_out:
+            self.progress('模型超时，精简上下文后重试一次…')
+            slim_user = text[:4000]
+            if self.contexts:
+                bits = []
+                for c in self.contexts[:2]:
+                    bits.append(
+                        f"### {c.get('title') or c.get('url')}\n"
+                        f"{(c.get('body') or '')[:8000]}"
+                    )
+                slim_user += '\n\n' + '\n\n'.join(bits)
+            slim_messages = [
+                {'role': 'system', 'content': system[:6000]},
+                {'role': 'user', 'content': slim_user},
+            ]
+            try:
+                response = _call(slim_messages, max_tokens=2000)
+            except Exception:
+                return self._fail(
+                    'AI 请求异常（超时重试也失败）。已保留上下文。\n'
+                    '建议：设 REVIEWAGENT_AI_TIMEOUT=300 后重启，或 /model 换更快模型，再 /retry。'
+                )
+
         if not isinstance(response, str) or not response.strip() or response.lstrip().startswith('Error:'):
-            return self._fail('AI 调用失败，已保留获取的上下文，可以重试。' +
-                              ('\n' + response if isinstance(response, str) else ''))
+            hint = ''
+            if isinstance(response, str) and 'timed out' in response.lower():
+                hint = (
+                    '\n建议：`set REVIEWAGENT_AI_TIMEOUT=300` 后重启 CLI，'
+                    '或 `/model` 换更快模型，再 `/retry`。'
+                )
+            return self._fail(
+                'AI 调用失败，已保留获取的上下文，可以重试。'
+                + ('\n' + response if isinstance(response, str) else '')
+                + hint
+            )
         self.history.extend([{'role': 'user', 'content': text[:8000]},
                              {'role': 'assistant', 'content': response[:12000]}])
         self.history = self.history[-8:]

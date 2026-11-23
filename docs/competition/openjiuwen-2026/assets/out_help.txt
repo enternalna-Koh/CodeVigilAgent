@@ -1,0 +1,34 @@
+ReviewAgent 1.8.0  ·  D:\Agent-ReviewAgent
+> /help
+
+审核 / 质检怎么用
+0) AI自动调换（默认）
+   闲聊↔正式审查自动切换；生产力: /fix→/commit→/push→/pr 或 /ship
+   钉住: /chat /work · 恢复调换: /mode auto
+0b) 多对话
+   /new [名字]  新开对话（旧的可 /back 返回）
+   /back        返回上一会话
+   /sessions    列表 · /resume 1 或 /resume 名字
+0c) Skills / MCP
+   /skill list|load <名>|install torch-npu-pr-review
+   /mcp  ·  /mcp tools ascend-doc  （内置昇腾文档 MCP）
+1) 贴链接
+   https://gitcode.com/Ascend/pytorch/issues/3135
+   https://gitcode.com/opengauss/Plugin/issues/…
+2) 多行输入
+   Win: 粘贴多行后 Enter 发送；Shift+Enter 换行
+   或 /paste → 粘贴 → /send
+   一次最多 20 个链接（REVIEWAGENT_MAX_URLS 可调）
+3) 换模型
+   /model  ·  /model MiniMax-M1  ·  reviewagent config --wizard
+4) 改补丁 → 真正落地
+   /fix → /apply → /commit "说明" → /push → /pr
+   一键引导: /ship "说明"（逐步确认，不 force）
+5) Git / SSH
+   /git status|diff|branch <名>|remote|ssh|test-ssh
+   /commit /push /pr [draft] [标题]
+6) 其它
+   /status /history /retry /export /review /ci /checklist /compare
+   /save /resume /sessions clean · /new /back
+退出: exit / /exit / Ctrl+C（自动存会话）
+/discard /context /sources /clear · /network auto|on|off

@@ -1,0 +1,10 @@
+ReviewAgent 1.8.0  ·  architecture (runtime)
+> (diagram)
+
+reviewagent / ra
+  └─ ConversationAgent  (AI自动调换 light/infra/general)
+       ├─ specialist_context  operator | inference | opengauss
+       ├─ investigate         web/local/fetch/mcp_call(read-only)
+       ├─ Skills              /skill list|load|install
+       ├─ MCP                 ascend-doc (built-in)
+       └─ git_work            /fix→/apply→/commit→/push→/pr|/ship

@@ -326,10 +326,40 @@ def suggest_commit_message(agent=None) -> str:
     return (last['out'] or 'Update').strip()[:72]
 
 
+def ship_confirmed(
+    message: str,
+    cwd: Optional[str] = None,
+    body: str = '',
+    create_pr: bool = True,
+    draft: bool = False,
+) -> str:
+    """Run commit → push → optional PR without interactive stdin.
+
+    Caller must have already obtained user confirmation (NL plan or UI).
+    Still never force-pushes or amends.
+    """
+    lines = ['## Ship（已确认，自动执行）', '']
+    commit_md = commit_changes(message, cwd=cwd)
+    lines.append(commit_md)
+    if not commit_md.startswith('已提交: '):
+        return '\n'.join(lines)
+    push_md = push_branch(cwd=cwd)
+    lines.append('')
+    lines.append(push_md)
+    if not push_md.startswith('已推送分支 '):
+        return '\n'.join(lines)
+    if create_pr:
+        lines.append('')
+        lines.append(create_pull_request(message, body=body or message, cwd=cwd, draft=draft))
+    return '\n'.join(lines)
+
+
 def format_cmd_help() -> str:
     return '''## 生产力命令（真正改仓库）
 
 工作流：`/fix` → `/apply` → `/commit ...` → `/push` → `/pr`
+
+自然语言：描述要做的事 → 回复「确认」整段执行（见对话计划）。
 
 | 命令 | 作用 |
 |------|------|

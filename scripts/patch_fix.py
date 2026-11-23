@@ -121,23 +121,53 @@ def detect_domain_from_contexts(contexts: List[Dict], explicit: Optional[str] = 
     return 'general', load.reason or 'general', ''
 
 
+def _strip_code_fence(text: str) -> str:
+    t = (text or '').strip()
+    if not t.startswith('```'):
+        return t
+    # ```json\n...\n``` or ```\n...\n```
+    body = t.split('\n', 1)[-1]
+    if '```' in body:
+        body = body.rsplit('```', 1)[0]
+    return body.strip()
+
+
+def _repair_jsonish(blob: str) -> str:
+    """Best-effort cleanup for common model JSON mistakes."""
+    s = blob.strip()
+    # trailing commas before } or ]
+    s = re.sub(r',(\s*[}\]])', r'\1', s)
+    return s
+
+
+def _loads_fix_object(text: str) -> Dict:
+    """Parse a dict with files[]; raise ValueError with a short reason."""
+    cleaned = _strip_code_fence(text)
+    start = cleaned.find('{')
+    end = cleaned.rfind('}')
+    if start < 0 or end <= start:
+        raise ValueError('模型未返回可解析的补丁 JSON')
+    blob = cleaned[start:end + 1]
+    last_err: Optional[Exception] = None
+    for candidate in (blob, _repair_jsonish(blob)):
+        try:
+            data = json.loads(candidate)
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError as exc:
+            last_err = exc
+            continue
+    # Show a short excerpt so /fix retries are actionable
+    excerpt = blob[:180].replace('\n', ' ')
+    detail = f'{last_err}' if last_err else 'unknown'
+    raise ValueError(f'补丁 JSON 解析失败（{detail}）；片段: {excerpt}…')
+
+
 def parse_fix_json(raw: str) -> ProposedFix:
     if not isinstance(raw, str):
         raise ValueError('模型补丁必须是 JSON 文本')
-    text = raw.strip()
-    if text.startswith('```'):
-        text = text.split('\n', 1)[-1]
-        text = text.rsplit('```', 1)[0].strip()
-    # extract first {...}
-    start = text.find('{')
-    end = text.rfind('}')
-    if start < 0 or end <= start:
-        raise ValueError('模型未返回可解析的补丁 JSON')
-    try:
-        data = json.loads(text[start:end + 1])
-    except json.JSONDecodeError:
-        raise ValueError('补丁 JSON 解析失败')
-    if not isinstance(data, dict) or not isinstance(data.get('files'), list):
+    data = _loads_fix_object(raw)
+    if not isinstance(data.get('files'), list):
         raise ValueError('files 必须是数组')
     if not all(isinstance(data.get(key, default), str)
                for key, default in (('scenario', 'general'), ('summary', ''))):

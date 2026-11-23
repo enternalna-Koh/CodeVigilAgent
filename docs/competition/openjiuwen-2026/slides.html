@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CodeVigil Agent · openJiuwen 创意提交 · 三三队</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #121a2b;
+    --card: #182338;
+    --line: #2a3a55;
+    --text: #e8eef8;
+    --muted: #9aa8c0;
+    --accent: #3d8bfd;
+    --accent2: #22c55e;
+    --warn: #f59e0b;
+    --pink: #a78bfa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #111;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--text);
+  }
+  .deck { display: flex; flex-direction: column; gap: 24px; padding: 24px; align-items: center; }
+  .slide {
+    width: 1920px;
+    height: 1080px;
+    background: radial-gradient(1200px 600px at 10% -10%, #1a2a4a 0%, var(--bg) 55%);
+    position: relative;
+    overflow: hidden;
+    border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  .slide::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(90deg, transparent 0, transparent 49%, rgba(61,139,253,.04) 50%, transparent 51%),
+      linear-gradient(0deg, transparent 0, transparent 49%, rgba(61,139,253,.04) 50%, transparent 51%);
+    background-size: 80px 80px;
+    pointer-events: none;
+  }
+  .pad { position: relative; z-index: 1; padding: 64px 72px; height: 100%; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    color: var(--accent); font-size: 22px; letter-spacing: .08em; font-weight: 600;
+    margin-bottom: 18px;
+  }
+  .eyebrow .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent2); box-shadow: 0 0 12px var(--accent2); }
+  h1 { font-size: 72px; line-height: 1.1; font-weight: 750; letter-spacing: -.02em; }
+  h2 { font-size: 48px; font-weight: 700; margin-bottom: 28px; }
+  h3 { font-size: 28px; font-weight: 650; margin-bottom: 12px; color: #cfe0ff; }
+  .sub { margin-top: 18px; font-size: 28px; color: var(--muted); max-width: 1400px; line-height: 1.45; }
+  .meta { margin-top: 40px; display: flex; flex-wrap: wrap; gap: 14px; }
+  .chip {
+    border: 1px solid var(--line); background: rgba(255,255,255,.03);
+    padding: 10px 18px; border-radius: 999px; font-size: 20px; color: #c5d3ea;
+  }
+  .chip strong { color: var(--accent2); font-weight: 650; }
+  .foot {
+    position: absolute; left: 72px; right: 72px; bottom: 40px;
+    display: flex; justify-content: space-between; color: #7f8eaa; font-size: 18px;
+    border-top: 1px solid rgba(42,58,85,.8); padding-top: 16px;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1.15fr .85fr; gap: 28px; height: calc(100% - 120px); }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 20px; height: calc(100% - 140px); }
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+    border: 1px solid var(--line); border-radius: 22px; padding: 28px 30px;
+  }
+  .card p, .card li { font-size: 22px; line-height: 1.55; color: #d5deed; }
+  .card ul { padding-left: 22px; }
+  .card li { margin: 8px 0; }
+  .tag {
+    display: inline-block; font-size: 16px; padding: 4px 10px; border-radius: 8px;
+    background: rgba(61,139,253,.15); color: #8cbcff; margin-bottom: 12px;
+  }
+  .tag.green { background: rgba(34,197,94,.15); color: #86efac; }
+  .tag.violet { background: rgba(167,139,250,.15); color: #ddd6fe; }
+  .tag.amber { background: rgba(245,158,11,.15); color: #fcd34d; }
+  .big-num { font-size: 56px; font-weight: 750; color: var(--accent); line-height: 1; margin-bottom: 8px; }
+  .flow {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 18px;
+  }
+  .flow span {
+    background: var(--card); border: 1px solid var(--line); padding: 12px 16px;
+    border-radius: 12px; font-size: 20px; font-family: Consolas, "Courier New", monospace;
+  }
+  .flow .arrow { color: var(--accent); border: none; background: transparent; font-size: 24px; padding: 0; }
+  .arch {
+    display: grid; grid-template-rows: auto auto auto auto; gap: 16px; height: calc(100% - 110px);
+  }
+  .arch .row { display: grid; gap: 16px; }
+  .arch .row.a { grid-template-columns: 1fr; }
+  .arch .row.b, .arch .row.c { grid-template-columns: 1fr 1fr; }
+  .shot-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px; height: calc(100% - 130px);
+  }
+  .shot-grid figure {
+    margin: 0; background: #0a0f18; border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .shot-grid figcaption {
+    padding: 10px 14px; font-size: 18px; color: var(--muted); border-top: 1px solid var(--line);
+  }
+  .shot-grid img { width: 100%; height: 100%; object-fit: cover; object-position: top left; flex: 1; background: #111; }
+  .kicker { font-size: 24px; color: var(--muted); margin-bottom: 8px; }
+  .hero-right {
+    border-radius: 24px; border: 1px solid var(--line); background: var(--panel);
+    padding: 28px; display: flex; flex-direction: column; gap: 16px; justify-content: center;
+  }
+  .stat { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .stat:last-child { border-bottom: none; }
+  .stat b { font-size: 34px; color: var(--accent2); }
+  .stat span { font-size: 20px; color: var(--muted); }
+  .quote {
+    margin-top: 28px; padding: 22px 26px; border-left: 4px solid var(--accent);
+    background: rgba(61,139,253,.08); border-radius: 0 16px 16px 0;
+    font-size: 26px; line-height: 1.5; color: #dbe7ff;
+  }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- 1 Cover -->
+  <section class="slide" data-name="01-cover">
+    <div class="pad">
+      <div class="eyebrow"><span class="dot"></span>openJiuwen 智能体创新大赛 · 创意提交</div>
+      <h1>CodeVigil Agent</h1>
+      <p class="sub">昇腾 AI Infra 审查与排障智能体 —— 把「能对话」升级为「能取证、能路由、能在确认后交付」的 Coding Agent。</p>
+      <div class="meta">
+        <div class="chip">队伍 <strong>三三队</strong></div>
+        <div class="chip">赛道 <strong>Coding</strong>（兼科研）</div>
+        <div class="chip">开源 <strong>MIT</strong></div>
+        <div class="chip">版本 <strong>v1.8.0</strong></div>
+        <div class="chip">CLI <strong>reviewagent</strong></div>
+      </div>
+      <div class="quote">仓库：github.com/enternalna-Koh/ReviewAgent</div>
+      <div class="grid-3" style="margin-top:36px">
+        <div class="card"><div class="tag green">感知</div><h3>取证</h3><p>GitHub / GitCode PR·Issue、CI、讨论一键拉取</p></div>
+        <div class="card"><div class="tag">规划</div><h3>专业路由</h3><p>算子 / 推理 / openGauss + Skills × 昇腾 MCP</p></div>
+        <div class="card"><div class="tag amber">行动</div><h3>确认后交付</h3><p>/fix→/apply→/ship，禁止 force / amend</p></div>
+      </div>
+      <div class="foot"><span>三三队 · CodeVigil Agent</span><span>01 / 06</span></div>
+    </div>
+  </section>
+
+  <!-- 2 Problem + value -->
+  <section class="slide" data-name="02-problem">
+    <div class="pad">
+      <div class="eyebrow"><span class="dot"></span>创意描述 · 痛点</div>
+      <h2>通用助手会说，昇腾开发者要能做事</h2>
+      <div class="grid-3" style="margin-top:8px">
+        <div class="card">
+          <div class="tag amber">痛点 01</div>
+          <h3>规则散落</h3>
+          <p>任务书、design 模板、精度口径、审核话术分散在多仓与群公告，贡献者难以一次对齐。</p>
+        </div>
+        <div class="card">
+          <div class="tag amber">痛点 02</div>
+          <h3>只会聊天</h3>
+          <p>通用模型不懂 GitCode / CI / 社区验收；给建议却拿不到证据，更落不了 Git 工作流。</p>
+        </div>
+        <div class="card">
+          <div class="tag amber">痛点 03</div>
+          <h3>改仓不安全</h3>
+          <p>自动改代码、乱 force 推送不可接受。社区与企业需要「只读调查 + 显式确认」。</p>
+        </div>
+      </div>
+      <div class="card" style="margin-top:22px">
+        <h3>我们的回答（&lt;500 字核心）</h3>
+        <p>CodeVigil Agent 是 Hermes 风格终端智能体：默认 AI 自动调换；贴上 GitHub/GitCode 链接或昇腾关键词进入 Infra 车道；按算子 / 推理 / openGauss 加载专业 Skills；经昇腾文档 MCP 查证；输出可证实问题与建议；本地改动必须 /fix→预览→/apply，再 /commit·/push·/pr 或 /ship 逐步确认，禁止 force/amend。已开源 MIT，209 项回归守护边界。</p>
+      </div>
+      <div class="foot"><span>三三队 · CodeVigil Agent</span><span>02 / 06</span></div>
+    </div>
+  </section>
+
+  <!-- 3 Theme + scene -->
+  <section class="slide" data-name="03-scene">
+    <div class="pad">
+      <div class="eyebrow"><span class="dot"></span>所属主题 · 应用场景</div>
+      <h2>Coding 主赛道 · 服务真实社区交付</h2>
+      <div class="grid-2">
+        <div>
+          <div class="card" style="margin-bottom:20px">
+            <div class="tag">所属主题（必填）</div>
+            <p><strong style="color:#86efac">主：Coding</strong> — 代码审查、CI 归因、补丁与 PR 生产力<br/>
+            <strong style="color:#ddd6fe">兼：科研</strong> — 社区 Issue/PR/师生审核对话采集与模式沉淀</p>
+          </div>
+          <div class="card">
+            <div class="tag violet">目标用户</div>
+            <ul>
+              <li>昇腾社区贡献者 / 学生（算子任务、API 一致性）</li>
+              <li>AI Infra 工程师（迁移、HCCL/ACL/CI 排障）</li>
+              <li>社区导师 / 审核人（复盘讨论与门禁）</li>
+              <li>openGauss 等兄弟社区贡献者（可迁移范式）</li>
+            </ul>
+          </div>
+        </div>
+        <div class="card">
+          <div class="tag green">三个故事</div>
+          <div style="margin-top:8px">
+            <div class="big-num">A</div>
+            <h3>社区任务自检</h3>
+            <p>粘贴 design PR → 算子路由 → cann-op-checker 红线报告</p>
+          </div>
+          <div style="margin-top:18px">
+            <div class="big-num">B</div>
+            <h3>CI 红了怎么办</h3>
+            <p>/ci 归类 + MCP 查文档 → /fix 预览 → /ship 开 PR</p>
+          </div>
+          <div style="margin-top:18px">
+            <div class="big-num">C</div>
+            <h3>导师复盘话术</h3>
+            <p>collect 拉取师生对话与 CI，按角色标注供 skill 引用</p>
+          </div>
+        </div>
+      </div>
+      <div class="foot"><span>三三队 · CodeVigil Agent</span><span>03 / 06</span></div>
+    </div>
+  </section>
+
+  <!-- 4 Architecture -->
+  <section class="slide" data-name="04-arch">
+    <div class="pad">
+      <div class="eyebrow"><span class="dot"></span>方案详情（必填）</div>
+      <h2>对话编排 × 专业规则 × 只读工具 × 显式生产力</h2>
+      <div class="arch">
+        <div class="row a"><div class="card"><h3>用户终端</h3><p>reviewagent / ra · AI自动调换 · /new /back · /skill · /mcp</p></div></div>
+        <div class="row b">
+          <div class="card"><div class="tag">专业路由</div><p>operator · inference · opengauss<br/>Agents + Skills（预算 16k 字符 / 32KiB）</p></div>
+          <div class="card"><div class="tag">调查循环</div><p>web / local / fetch_pr_issue<br/>mcp_call（仅 readOnlyHint=true）</p></div>
+        </div>
+        <div class="row c">
+          <div class="card"><div class="tag green">昇腾 MCP</div><p>内置 ascend-doc<br/>npx -y ascend-doc-mcp@latest</p></div>
+          <div class="card"><div class="tag amber">生产力闭环</div><p>/fix→/apply→/commit→/push→/pr<br/>/ship 逐步确认 · 禁 force</p></div>
+        </div>
+        <div class="row a"><div class="card"><p>证据层：GitHub / GitCode API · 本地案例库 · collect（CI / 师生审核对话）</p></div></div>
+      </div>
+      <div class="foot"><span>三三队 · CodeVigil Agent</span><span>04 / 06</span></div>
+    </div>
+  </section>
+
+  <!-- 5 Advantage + demo plan -->
+  <section class="slide" data-name="05-advantage">
+    <div class="pad">
+      <div class="eyebrow"><span class="dot"></span>方案优势 · 技术依赖 · DEMO</div>
+      <h2>垂直、可溯源、默认安全</h2>
+      <div class="grid-2">
+        <div class="card">
+          <div class="tag">方案优势</div>
+          <ul>
+            <li>相对通用 Chat：深耕昇腾验收口径与 GitCode 工作流</li>
+            <li>相对纯规则扫描：能引用社区案例与文档 MCP</li>
+            <li>相对自动改仓助手：只读调查 + 显式确认，适合社区/企业合规</li>
+            <li>范式可迁移：已落地 openGauss 第三场景</li>
+          </ul>
+          <div class="flow">
+            <span>/fix</span><span class="arrow">→</span>
+            <span>/apply</span><span class="arrow">→</span>
+            <span>/commit</span><span class="arrow">→</span>
+            <span>/push</span><span class="arrow">→</span>
+            <span>/pr</span>
+          </div>
+        </div>
+        <div class="hero-right">
+          <div class="stat"><span>自动化回归</span><b>209</b></div>
+          <div class="stat"><span>专业 Agent 路由</span><b>3</b></div>
+          <div class="stat"><span>内置昇腾 MCP</span><b>ascend-doc</b></div>
+          <div class="stat"><span>开源协议</span><b>MIT</b></div>
+          <p style="margin-top:12px;font-size:20px;color:var(--muted);line-height:1.5">
+            入选后 DEMO：装 CLI → 贴 GitCode 链接 → 出报告 → 补丁预览（≤3 分钟视频）。
+            可选封装为 openJiuwen WorkSwarm 工具节点争取生态加分（当前未虚构已接入）。
+            依赖：自备模型 API · 可选 GITCODE_TOKEN · Node≥22。
+          </p>
+        </div>
+      </div>
+      <div class="foot"><span>三三队 · CodeVigil Agent</span><span>05 / 06</span></div>
+    </div>
+  </section>
+
+  <!-- 6 Real screenshots -->
+  <section class="slide" data-name="06-demo">
+    <div class="pad">
+      <div class="eyebrow"><span class="dot"></span>DEMO / 实机截图</div>
+      <h2>本机 v1.8.0 真实命令输出</h2>
+      <div class="shot-grid">
+        <figure>
+          <img src="assets/shot_help.png" alt="/help" />
+          <figcaption>/help · AI自动调换 · Skills/MCP · Git 生产力</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/shot_skill.png" alt="/skill" />
+          <figcaption>/skill list · 本仓技能 + 官方可安装包</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/shot_mcp.png" alt="/mcp" />
+          <figcaption>/mcp · 内置昇腾文档 MCP（ascend-doc）</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/shot_arch.png" alt="arch" />
+          <figcaption>能力分层示意（与实现一致）</figcaption>
+        </figure>
+      </div>
+      <div class="foot"><span>三三队 · CodeVigil Agent</span><span>06 / 06</span></div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
